@@ -2,6 +2,7 @@ package com.limelight;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.view.View;
@@ -21,7 +22,7 @@ import java.util.Scanner;
 public class HomePhoneLoginActivity extends AppCompatActivity {
 
     EditText phoneInput, nameInput, familyInput, emailInput, codeInput;
-    Button sendCodeButton, registerButton, verifyButton, backToLoginButton;
+    Button sendCodeButton, registerButton, verifyButton, backToLoginButton, resendCodeButton;
     TextView statusText, timerText;
 
     CountDownTimer timer;
@@ -54,14 +55,19 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
         registerButton = findViewById(R.id.registerButton);
         verifyButton = findViewById(R.id.verifyButton);
         backToLoginButton = findViewById(R.id.backToLoginButton);
+        resendCodeButton = findViewById(R.id.resendCodeButton);
 
         statusText = findViewById(R.id.statusText);
         timerText = findViewById(R.id.timerText);
 
+        resendCodeButton.setEnabled(false);
+        resendCodeButton.setAlpha(0.4f);
+        resendCodeButton.setTextColor(Color.parseColor("#AAAAAA"));
+
         sendCodeButton.setOnClickListener(v -> {
             String phone = phoneInput.getText().toString().trim();
             if (!phone.matches("^09\\d{9}$")) {
-                statusText.setText("شماره موبایل معتبر نیست");
+                statusText.setText("شماره موبایل باید با ۰۹ شروع شود و ۱۱ رقم باشد");
                 return;
             }
             sendCodeToApi(phone);
@@ -104,6 +110,16 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
             showLoginMode();
         });
 
+        resendCodeButton.setOnClickListener(v -> {
+            resendCodeButton.setEnabled(false);
+            resendCodeButton.setAlpha(0.4f);
+            resendCodeButton.setTextColor(Color.parseColor("#AAAAAA"));
+
+            secondsRemaining = 59;
+            startTimer();
+            sendCodeToApi(phoneInput.getText().toString().trim());
+        });
+
         showLoginMode();
     }
 
@@ -115,8 +131,11 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
         codeInput.setVisibility(View.GONE);
         verifyButton.setVisibility(View.GONE);
         backToLoginButton.setVisibility(View.GONE);
+        resendCodeButton.setVisibility(View.GONE);
         timerText.setVisibility(View.GONE);
         sendCodeButton.setVisibility(View.VISIBLE);
+        phoneInput.setEnabled(true);
+        phoneInput.setAlpha(1.0f);
     }
 
     private void showRegisterForm() {
@@ -130,10 +149,19 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
     }
 
     private void showCodeInput() {
+        codeSent = true;
         codeInput.setVisibility(View.VISIBLE);
         verifyButton.setVisibility(View.VISIBLE);
         timerText.setVisibility(View.VISIBLE);
+        resendCodeButton.setVisibility(View.VISIBLE);
+        resendCodeButton.setEnabled(false);
+        resendCodeButton.setAlpha(0.4f);
+        resendCodeButton.setTextColor(Color.parseColor("#AAAAAA"));
+
         registerButton.setVisibility(View.GONE);
+        sendCodeButton.setVisibility(View.GONE);
+        phoneInput.setEnabled(false);
+        phoneInput.setAlpha(0.4f);
     }
 
     private void sendCodeToApi(String phone) {
@@ -218,13 +246,11 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     if (responseCode == 200 && responseJson.optBoolean("success", false)) {
                         statusText.setText("کد ارسال شد ، لطفاً آن را وارد کنید");
-                        codeSent = true;
                         showCodeInput();
                     } else {
                         String msg = responseJson.optString("message", "ثبت‌نام با خطا مواجه شد");
                         statusText.setText(msg);
                         registerButton.setEnabled(true);
-
                         if (responseCode == 409) {
                             backToLoginButton.setVisibility(View.VISIBLE);
                         }
@@ -267,12 +293,10 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     if (codeResponse == 200) {
                         statusText.setText("ورود موفقیت‌آمیز بود");
-
                         SharedPreferences prefs = getSharedPreferences("amnyar", MODE_PRIVATE);
                         prefs.edit().putBoolean("is_logged_in", true).apply();
 
-                        Intent intent = new Intent(HomePhoneLoginActivity.this, PcView.class);
-                        startActivity(intent);
+                        startActivity(new Intent(HomePhoneLoginActivity.this, PcView.class));
                         finish();
                     } else {
                         statusText.setText("کد اشتباه یا منقضی شده");
@@ -288,6 +312,10 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
     private void startTimer() {
         secondsRemaining = 59;
         timerText.setVisibility(View.VISIBLE);
+        resendCodeButton.setEnabled(false);
+        resendCodeButton.setAlpha(0.4f);
+        resendCodeButton.setTextColor(Color.parseColor("#AAAAAA"));
+
         timer = new CountDownTimer(59000, 1000) {
             @Override
             public void onTick(long millisUntilFinished) {
@@ -297,8 +325,9 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
 
             @Override
             public void onFinish() {
-                sendCodeButton.setEnabled(true);
-                registerButton.setEnabled(true);
+                resendCodeButton.setEnabled(true);
+                resendCodeButton.setAlpha(1.0f);
+                resendCodeButton.setTextColor(Color.parseColor("#000000"));
                 timerText.setVisibility(View.GONE);
             }
         }.start();

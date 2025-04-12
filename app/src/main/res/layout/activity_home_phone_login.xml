@@ -24,12 +24,13 @@
             android:layout_width="match_parent"
             android:layout_height="50dp"
             android:hint="شماره موبایل"
+			android:textSize="16sp"
             android:inputType="phone"
             android:maxLength="11"
             android:gravity="center"
             android:textAlignment="center"
             android:textColor="#FFFFFF"
-            android:textColorHint="#AAAAAA"
+            android:textColorHint="#6b6b6b9c"
             android:background="@drawable/rounded_input"
             android:padding="12dp"
             android:layout_marginBottom="16dp" />
@@ -113,11 +114,13 @@
             android:id="@+id/sendCodeButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="ورود و ثبت‌ نام"
+            android:text="بزن بریم !"
+            android:background="@drawable/btn_signup_background"
             android:textColor="#FFFFFF"
             android:backgroundTint="#4CAF50"
+            android:padding="12dp"
             android:layout_marginBottom="12dp" />
-
+			
         <Button
             android:id="@+id/registerButton"
             android:layout_width="match_parent"
@@ -149,6 +152,16 @@
             android:textColor="#AAAAAA"
             android:backgroundTint="#FFEB3B"
             android:layout_marginBottom="12dp" />
+
+	    <ImageView
+            android:id="@+id/bottomImage"
+            android:layout_width="75dp"
+            android:layout_height="75dp"
+            android:src="@drawable/bottom_image"
+            android:layout_marginTop="100dp"
+			android:layout_marginBottom="50dp"
+            android:layout_gravity="center_horizontal"
+            android:contentDescription="Bottom Decorative Image" />
 
         <Button
             android:id="@+id/backToLoginButton"

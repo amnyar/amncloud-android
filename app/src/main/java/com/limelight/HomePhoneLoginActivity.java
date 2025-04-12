@@ -1,14 +1,20 @@
 package com.limelight;
 
+import android.animation.AnimatorSet;
+import android.animation.ObjectAnimator;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.os.CountDownTimer;
+import android.os.Handler;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.TextView;
+
+import android.view.inputmethod.InputMethodManager;
 
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -17,6 +23,7 @@ import org.json.JSONObject;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Random;
 import java.util.Scanner;
 
 public class HomePhoneLoginActivity extends AppCompatActivity {
@@ -44,6 +51,61 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
         }
 
         setContentView(R.layout.activity_home_phone_login);
+        ImageView logo = findViewById(R.id.logo);
+
+        ImageView bottomImage = findViewById(R.id.bottomImage);
+        Handler handler = new Handler();
+        Random random = new Random();
+
+        Runnable animationRunnable = new Runnable() {
+            @Override
+            public void run() {
+                int type = random.nextInt(5); // 0 to 4
+
+                AnimatorSet animatorSet = new AnimatorSet();
+
+                switch (type) {
+                    case 0: 
+                        ObjectAnimator upDown = ObjectAnimator.ofFloat(bottomImage, "translationY", 0f, -50f, 0f);
+                        upDown.setDuration(800);
+                        animatorSet.play(upDown);
+                        break;
+
+                    case 1: 
+                        ObjectAnimator leftRight = ObjectAnimator.ofFloat(bottomImage, "translationX", 0f, 50f, -50f, 0f);
+                        leftRight.setDuration(900);
+                        animatorSet.play(leftRight);
+                        break;
+
+                    case 2: 
+					    float angle = random.nextBoolean() ? 360f : -360f;
+                        ObjectAnimator rotate = ObjectAnimator.ofFloat(bottomImage, "rotation", 0f, angle);
+                        rotate.setDuration(1000);
+                        animatorSet.play(rotate);
+                        break;
+
+                    case 3:
+                        ObjectAnimator blinkOut = ObjectAnimator.ofFloat(bottomImage, "alpha", 1f, 0f);
+                        blinkOut.setDuration(200);
+                        ObjectAnimator blinkIn = ObjectAnimator.ofFloat(bottomImage, "alpha", 0f, 1f);
+                        blinkIn.setDuration(200);
+                        animatorSet.playSequentially(blinkOut, blinkIn, blinkOut, blinkIn);
+                        break;
+
+                    case 4: 
+                        ObjectAnimator scaleX = ObjectAnimator.ofFloat(bottomImage, "scaleX", 1f, 1.4f, 1f);
+                        ObjectAnimator scaleY = ObjectAnimator.ofFloat(bottomImage, "scaleY", 1f, 1.4f, 1f);
+                        scaleX.setDuration(700);
+                        scaleY.setDuration(700);
+                        animatorSet.playTogether(scaleX, scaleY);
+                        break;
+                }
+
+                animatorSet.start();
+                handler.postDelayed(this, 1500 + random.nextInt(800));
+            }
+        };
+        handler.post(animationRunnable);
 
         phoneInput = findViewById(R.id.phoneInput);
         nameInput = findViewById(R.id.nameInput);
@@ -111,6 +173,8 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
         });
 
         resendCodeButton.setOnClickListener(v -> {
+			resendCodeButton.setVisibility(View.GONE);
+            timerText.setVisibility(View.VISIBLE);
             resendCodeButton.setEnabled(false);
             resendCodeButton.setAlpha(0.4f);
             resendCodeButton.setTextColor(Color.parseColor("#AAAAAA"));
@@ -121,7 +185,12 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
         });
 
         showLoginMode();
+		phoneInput.requestFocus();
+        phoneInput.postDelayed(() -> {
+    getSystemService(InputMethodManager.class).showSoftInput(phoneInput, InputMethodManager.SHOW_IMPLICIT);
+       }, 300);
     }
+
 
     private void showLoginMode() {
         nameInput.setVisibility(View.GONE);
@@ -160,8 +229,16 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
 
         registerButton.setVisibility(View.GONE);
         sendCodeButton.setVisibility(View.GONE);
+		backToLoginButton.setVisibility(View.VISIBLE);
+		
         phoneInput.setEnabled(false);
         phoneInput.setAlpha(0.4f);
+		codeInput.requestFocus();
+        codeInput.postDelayed(() -> {
+        codeInput.requestFocus();
+
+        getSystemService(InputMethodManager.class).showSoftInput(codeInput, InputMethodManager.SHOW_IMPLICIT);
+        }, 300);
     }
 
     private void sendCodeToApi(String phone) {
@@ -311,25 +388,28 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
 
     private void startTimer() {
         secondsRemaining = 59;
-        timerText.setVisibility(View.VISIBLE);
+		timerText.setVisibility(View.VISIBLE);
         resendCodeButton.setEnabled(false);
         resendCodeButton.setAlpha(0.4f);
         resendCodeButton.setTextColor(Color.parseColor("#AAAAAA"));
 
-        timer = new CountDownTimer(59000, 1000) {
-            @Override
-            public void onTick(long millisUntilFinished) {
-                secondsRemaining--;
-                timerText.setText("ارسال مجدد تا " + secondsRemaining + " ثانیه دیگر");
-            }
+    timer = new CountDownTimer(59000, 1000) {
+    @Override
+    public void onTick(long millisUntilFinished) {
+        secondsRemaining--;
+        timerText.setText("ارسال مجدد تا " + secondsRemaining + " ثانیه دیگر");
+        
+        resendCodeButton.setVisibility(View.GONE);
+    }
 
-            @Override
-            public void onFinish() {
-                resendCodeButton.setEnabled(true);
-                resendCodeButton.setAlpha(1.0f);
-                resendCodeButton.setTextColor(Color.parseColor("#000000"));
-                timerText.setVisibility(View.GONE);
-            }
-        }.start();
+    @Override
+    public void onFinish() {
+        resendCodeButton.setEnabled(true);
+        resendCodeButton.setAlpha(1.0f);
+        resendCodeButton.setTextColor(Color.parseColor("#000000"));
+        resendCodeButton.setVisibility(View.VISIBLE);
+        timerText.setVisibility(View.GONE);
+    }
+    }.start();
     }
 }

@@ -1,38 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <!--
-        Base application theme, dependent on API level. This theme is replaced
-        by AppBaseTheme from res/values-vXX/styles.xml on newer devices.
 
-    -->
-    <style name="AppBaseTheme" parent="Theme.AppCompat.Light.NoActionBar">
-        <!--
-            Theme customizations available in newer API levels can go in
-            res/values-vXX/styles.xml, while customizations related to
-            backward-compatibility can go here.
+    <style name="AppBaseTheme" parent="Theme.AppCompat.Light.NoActionBar" />
 
-        -->
-    </style>
 
-    <!-- Application theme. -->
     <style name="AppTheme" parent="AppBaseTheme">
-        <!-- All customizations that are NOT specific to a particular API-level can go here. -->
         <item name="android:windowActionBar">false</item>
         <item name="android:windowNoTitle">true</item>
-		<item name="android:windowBackground">@android:color/white</item>
     </style>
 
+
     <style name="StreamBaseTheme" parent="AppBaseTheme">
-        <!-- Transparent streaming background to avoid extra overdraw -->
         <item name="android:windowBackground">@android:color/transparent</item>
     </style>
 
-    <!-- Stream activity theme -->
+
     <style name="StreamTheme" parent="StreamBaseTheme">
-        <!-- All customizations that are NOT specific to a particular API-level can go here. -->
         <item name="android:windowActionBar">false</item>
         <item name="android:windowNoTitle">true</item>
+    </style>
+
+    <style name="StreamThemeNew" parent="StreamBaseTheme">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+
+
+    <style name="SplashThemeNew" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+    </style>
+
+
+    <style name="PcViewThemeNew" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">#6f6f6f</item>
     </style>
 
 </resources>

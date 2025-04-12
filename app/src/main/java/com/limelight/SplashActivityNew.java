@@ -10,12 +10,12 @@ import android.widget.ImageView;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-public class SplashActivity extends AppCompatActivity {
+public class SplashActivityNew extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_splash);
+        setContentView(R.layout.activity_splash_new);
 
         ImageView logo = findViewById(R.id.splash_logo);
 
@@ -29,9 +29,9 @@ public class SplashActivity extends AppCompatActivity {
 
             Intent intent;
             if (isLoggedIn) {
-                intent = new Intent(SplashActivity.this, PcView.class);
+                intent = new Intent(SplashActivityNew.this, PcView.class);
             } else {
-                intent = new Intent(SplashActivity.this, HomePhoneLoginActivity.class);
+                intent = new Intent(SplashActivityNew.this, HomePhoneLoginActivity.class);
             }
 
             startActivity(intent);

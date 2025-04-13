@@ -8,7 +8,7 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.os.CountDownTimer;
 import android.os.Handler;
-import android.util.Log; // <-- Import اضافه شد
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -20,7 +20,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import org.json.JSONObject;
 
-import java.io.InputStream; // <-- Import اضافه شد (برای InputStream)
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -61,7 +61,7 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
         Runnable animationRunnable = new Runnable() {
             @Override
             public void run() {
-                int type = random.nextInt(5); // 0 to 4
+                int type = random.nextInt(5);
 
                 AnimatorSet animatorSet = new AnimatorSet();
 
@@ -133,7 +133,7 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
                 statusText.setText("شماره موبایل باید با ۰۹ شروع شود و ۱۱ رقم باشد");
                 return;
             }
-            sendCodeToApi(phone); // <-- تابع اصلاح شده فراخوانی می شود
+            sendCodeToApi(phone);
         });
 
         registerButton.setOnClickListener(v -> {
@@ -147,7 +147,7 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
                 return;
             }
 
-            if (!email.contains("@")) { // Basic check, consider Patterns.EMAIL_ADDRESS.matcher(email).matches()
+            if (!email.contains("@")) {
                 statusText.setText("ایمیل معتبر نیست");
                 return;
             }
@@ -170,17 +170,15 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
         backToLoginButton.setOnClickListener(v -> {
             registrationMode = false;
             codeSent = false;
-             if (timer != null) { // Cancel timer when going back
-                 timer.cancel();
-                 timer = null;
+             if (timer != null) {
+                  timer.cancel();
+                  timer = null;
              }
             showLoginMode();
         });
 
         resendCodeButton.setOnClickListener(v -> {
-            // No need to manage visibility/enabled state here, startTimer does it
-            // Just call send code again and start timer
-            sendCodeToApi(phoneInput.getText().toString().trim()); // Resend login/check code
+            sendCodeToApi(phoneInput.getText().toString().trim());
         });
 
         showLoginMode();
@@ -188,7 +186,7 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
         phoneInput.postDelayed(() -> {
            InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
            if (imm != null) {
-                imm.showSoftInput(phoneInput, InputMethodManager.SHOW_IMPLICIT);
+               imm.showSoftInput(phoneInput, InputMethodManager.SHOW_IMPLICIT);
            }
         }, 300);
     }
@@ -206,12 +204,12 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
         timerText.setVisibility(View.GONE);
 
         sendCodeButton.setVisibility(View.VISIBLE);
-        sendCodeButton.setEnabled(true); // Ensure enabled when shown
+        sendCodeButton.setEnabled(true);
 
         phoneInput.setEnabled(true);
         phoneInput.setAlpha(1.0f);
-        phoneInput.setText(""); // Clear phone input
-        statusText.setText(""); // Clear status
+        phoneInput.setText("");
+        statusText.setText("");
     }
 
     private void showRegisterForm() {
@@ -220,7 +218,7 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
         familyInput.setVisibility(View.VISIBLE);
         emailInput.setVisibility(View.VISIBLE);
         registerButton.setVisibility(View.VISIBLE);
-        registerButton.setEnabled(true); // Ensure enabled
+        registerButton.setEnabled(true);
 
         backToLoginButton.setVisibility(View.VISIBLE);
         sendCodeButton.setVisibility(View.GONE);
@@ -229,21 +227,20 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
         resendCodeButton.setVisibility(View.GONE);
         timerText.setVisibility(View.GONE);
 
-         phoneInput.setEnabled(false); // Keep phone disabled
+         phoneInput.setEnabled(false);
          phoneInput.setAlpha(0.4f);
-         nameInput.requestFocus(); // Focus on name field
+         nameInput.requestFocus();
     }
 
     private void showCodeInput() {
         codeSent = true;
         codeInput.setVisibility(View.VISIBLE);
-        codeInput.setText(""); // Clear previous code
+        codeInput.setText("");
         verifyButton.setVisibility(View.VISIBLE);
-        verifyButton.setEnabled(true); // Ensure enabled
+        verifyButton.setEnabled(true);
 
-        timerText.setVisibility(View.VISIBLE); // Timer text shown by timer itself
-        // resendCodeButton visibility managed by timer finish/start
-        resendCodeButton.setVisibility(View.GONE); // Hide initially, timer will show it
+        timerText.setVisibility(View.VISIBLE);
+        resendCodeButton.setVisibility(View.GONE);
 
         registerButton.setVisibility(View.GONE);
         sendCodeButton.setVisibility(View.GONE);
@@ -251,31 +248,25 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
         familyInput.setVisibility(View.GONE);
         emailInput.setVisibility(View.GONE);
 
-        backToLoginButton.setVisibility(View.VISIBLE); // Allow going back
+        backToLoginButton.setVisibility(View.VISIBLE);
 
-        phoneInput.setEnabled(false); // Keep phone disabled
+        phoneInput.setEnabled(false);
         phoneInput.setAlpha(0.4f);
 
         codeInput.requestFocus();
         codeInput.postDelayed(() -> {
             InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
              if (imm != null) {
-                 imm.showSoftInput(codeInput, InputMethodManager.SHOW_IMPLICIT);
-            }
+                  imm.showSoftInput(codeInput, InputMethodManager.SHOW_IMPLICIT);
+             }
         }, 300);
-         // Timer should be started by the function that calls showCodeInput if needed
     }
 
 
-    // ========================================================================
-    // START OF REPLACED FUNCTION sendCodeToApi
-    // ========================================================================
     private void sendCodeToApi(String phone) {
         statusText.setText("در حال ارسال کد . . .");
         sendCodeButton.setEnabled(false);
-        // Note: Timer might be better started AFTER successful API call indication
-        // But keeping original logic for now, ensure it's cancelled correctly
-        startTimer(); // Starts or restarts the timer
+        startTimer();
 
         new Thread(() -> {
             HttpURLConnection conn = null;
@@ -285,30 +276,28 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
                 conn.setRequestMethod("POST");
                 conn.setRequestProperty("Content-Type", "application/json");
                 conn.setDoOutput(true);
-                conn.setConnectTimeout(15000); // 15 seconds connection timeout
-                conn.setReadTimeout(15000);    // 15 seconds read timeout
+                conn.setConnectTimeout(15000);
+                conn.setReadTimeout(15000);
 
                 JSONObject json = new JSONObject();
                 json.put("phone", phone);
 
                 OutputStream os = conn.getOutputStream();
-                os.write(json.toString().getBytes("UTF-8")); // Specify UTF-8 encoding
+                os.write(json.toString().getBytes("UTF-8"));
                 os.flush();
                 os.close();
 
-                int responseCode = conn.getResponseCode(); // Get the HTTP status code first
+                int responseCode = conn.getResponseCode();
 
                 InputStream inputStream;
-                // Use getInputStream for success codes (2xx), getErrorStream for others
                 if (responseCode >= 200 && responseCode < 400) {
                     inputStream = conn.getInputStream();
                 } else {
-                    inputStream = conn.getErrorStream(); // Use error stream for 404 and other errors
+                    inputStream = conn.getErrorStream();
                 }
 
                 String responseString = "";
                 if (inputStream != null) {
-                    // Try-with-resources for Scanner ensures it's closed
                     try (Scanner scanner = new Scanner(inputStream, "UTF-8")) {
                          responseString = scanner.useDelimiter("\\A").next();
                     }
@@ -316,35 +305,26 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
                      Log.w("sendCodeToApi", "InputStream was null for response code: " + responseCode);
                 }
 
-                // Process result on UI thread
                 final int finalResponseCode = responseCode;
-                final String finalResponseString = responseString; // Use final variable for lambda
+                final String finalResponseString = responseString;
 
                 runOnUiThread(() -> {
-                    // --- UI updates and state reset ---
-                    // Timer is managed by startTimer/onFinish/onTick
-                    // We only need to re-enable the primary button if needed
-                    sendCodeButton.setEnabled(true); // Always re-enable the button eventually
+                    sendCodeButton.setEnabled(true);
 
-                    // --- Handle response codes ---
                     if (finalResponseCode == 200) {
-                        // Existing user, code sent successfully
                         statusText.setText("کد با موفقیت ارسال شد");
-                        // Timer is already running via startTimer() call above
-                        showCodeInput(); // Show code input field
+                        showCodeInput();
                     } else if (finalResponseCode == 404) {
-                        // User not found - Stop the timer, show registration form
                         if (timer != null) {
-                             timer.cancel();
-                             timer = null;
+                              timer.cancel();
+                              timer = null;
                         }
                         timerText.setVisibility(View.GONE);
                         resendCodeButton.setVisibility(View.GONE);
 
                         statusText.setText("کاربری با این شماره وجود ندارد، لطفاً ثبت‌نام کنید.");
-                        showRegisterForm(); // Show the registration form
+                        showRegisterForm();
                     } else {
-                        // Handle other potential errors - Stop the timer, revert to login mode
                          if (timer != null) {
                             timer.cancel();
                             timer = null;
@@ -352,14 +332,12 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
                          timerText.setVisibility(View.GONE);
                          resendCodeButton.setVisibility(View.GONE);
 
-                        String errorMessage = "خطا در ارسال کد"; // Default
+                        String errorMessage = "خطا در ارسال کد";
                         try {
                             if (!finalResponseString.isEmpty()) {
-                                // Try to parse error message from JSON response body
                                 JSONObject errorJson = new JSONObject(finalResponseString);
                                 errorMessage = errorJson.optString("message", errorMessage);
                             } else {
-                                // Provide more specific default messages based on code if possible
                                 if (finalResponseCode == 400) errorMessage = "درخواست نامعتبر (کد ۴۰۰)";
                                 else if (finalResponseCode == 500) errorMessage = "خطای داخلی سرور (کد ۵۰۰)";
                                 else errorMessage = "خطا در ارسال کد (" + finalResponseCode + ")";
@@ -369,47 +347,39 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
                             errorMessage = "خطای نامشخص در پاسخ سرور (" + finalResponseCode + ")";
                         }
                         statusText.setText(errorMessage);
-                        showLoginMode(); // Revert to login mode on unexpected errors
+                        showLoginMode();
                     }
                 });
 
             } catch (Exception e) {
-                // Log the actual exception for debugging
                 Log.e("sendCodeToApi", "Network or processing error", e);
                 runOnUiThread(() -> {
-                    // --- UI updates and state reset in catch block ---
                      if (timer != null) {
                         timer.cancel();
                         timer = null;
                      }
-                    sendCodeButton.setEnabled(true); // Re-enable button
-                    timerText.setVisibility(View.GONE); // Hide timer elements
+                    sendCodeButton.setEnabled(true);
+                    timerText.setVisibility(View.GONE);
                     resendCodeButton.setVisibility(View.GONE);
 
-                    statusText.setText("خطا در ارتباط با سرور"); // Show generic error to user
-                    showLoginMode(); // Revert to login mode on network error
+                    statusText.setText("خطا در ارتباط با سرور");
+                    showLoginMode();
                 });
             } finally {
                 if (conn != null) {
-                    conn.disconnect(); // Ensure connection is always closed
+                    conn.disconnect();
                 }
             }
         }).start();
     }
-    // ========================================================================
-    // END OF REPLACED FUNCTION sendCodeToApi
-    // ========================================================================
 
 
-    // --- sendRegisterRequest (Original - with getErrorStream fix) ---
     private void sendRegisterRequest(String phone, String name, String family, String email) {
         statusText.setText("در حال ثبت ‌نام . . .");
         registerButton.setEnabled(false);
-        // Decide if timer should start here or only after success? Assuming only after success for register
-        // startTimer(); // Commented out - Start timer only when code is actually sent (in success case)
 
         new Thread(() -> {
-            HttpURLConnection conn = null; // Initialize
+            HttpURLConnection conn = null;
             try {
                 URL url = new URL("https://bazicloud.com/wp-json/amncloud/v1/request-registration-code");
                 conn = (HttpURLConnection) url.openConnection();
@@ -436,14 +406,14 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
                 if (responseCode >= 200 && responseCode < 400) {
                     inputStream = conn.getInputStream();
                 } else {
-                    inputStream = conn.getErrorStream(); // Use error stream here too!
+                    inputStream = conn.getErrorStream();
                 }
 
                 String responseString = "";
                  if (inputStream != null) {
-                     try (Scanner scanner = new Scanner(inputStream, "UTF-8")) {
-                         responseString = scanner.useDelimiter("\\A").next();
-                     }
+                      try (Scanner scanner = new Scanner(inputStream, "UTF-8")) {
+                           responseString = scanner.useDelimiter("\\A").next();
+                      }
                  } else {
                       Log.w("sendRegisterRequest", "InputStream was null for response code: " + responseCode);
                  }
@@ -452,20 +422,19 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
                 final String finalResponseString = responseString;
 
                 runOnUiThread(() -> {
-                    registerButton.setEnabled(true); // Re-enable button in most cases
+                    registerButton.setEnabled(true);
 
                     JSONObject responseJson = null;
                     boolean success = false;
-                    String apiMessage = "ثبت‌نام با خطا مواجه شد"; // Default message
+                    String apiMessage = "ثبت‌نام با خطا مواجه شد";
 
                     try {
                          if (!finalResponseString.isEmpty()) {
-                              responseJson = new JSONObject(finalResponseString);
-                              // Check success *only* for 200 OK
-                              if (finalResponseCode == 200) {
-                                   success = responseJson.optBoolean("success", false);
-                              }
-                              apiMessage = responseJson.optString("message", apiMessage); // Get message regardless of code
+                                responseJson = new JSONObject(finalResponseString);
+                                if (finalResponseCode == 200) {
+                                    success = responseJson.optBoolean("success", false);
+                                }
+                                apiMessage = responseJson.optString("message", apiMessage);
                          }
                     } catch (Exception parseEx) {
                          Log.e("sendRegisterRequest", "Error parsing JSON response", parseEx);
@@ -475,26 +444,22 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
 
                     if (finalResponseCode == 200 && success) {
                         statusText.setText("کد ارسال شد ، لطفاً آن را وارد کنید");
-                        startTimer(); // Start timer only on success
+                        startTimer();
                         showCodeInput();
                     } else {
-                        // Handle errors including 409
-                        statusText.setText(apiMessage); // Show message from API or default error
+                        statusText.setText(apiMessage);
 
                         if (finalResponseCode == 409) {
-                            // User exists - revert to login mode
                             registrationMode = false;
                             codeSent = false;
-                             if (timer != null) { // Ensure timer is stopped if it was running
-                                 timer.cancel();
-                                 timer = null;
+                             if (timer != null) {
+                                  timer.cancel();
+                                  timer = null;
                              }
                             showLoginMode();
-                            // Append instruction to message
                             statusText.setText(apiMessage + "\n" + "لطفاً به جای ثبت‌نام، وارد شوید.");
                         } else {
-                            // For other errors, just display the message and keep user on register form
-                            registerButton.setEnabled(true); // Ensure button is enabled
+                            registerButton.setEnabled(true);
                         }
                     }
                 });
@@ -503,29 +468,27 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
                 Log.e("sendRegisterRequest", "Network or processing error", e);
                 runOnUiThread(() -> {
                     statusText.setText("خطا در ثبت‌نام یا ارتباط با سرور");
-                    registerButton.setEnabled(true); // Re-enable button
+                    registerButton.setEnabled(true);
                 });
             } finally {
                  if (conn != null) {
-                     conn.disconnect();
+                      conn.disconnect();
                  }
             }
         }).start();
     }
 
 
-    // --- verifyCode (Original - with getErrorStream fix and better response handling) ---
     private void verifyCode(String phone, String code) {
         statusText.setText("در حال بررسی کد . . .");
-        verifyButton.setEnabled(false); // Disable button while verifying
+        verifyButton.setEnabled(false);
 
         new Thread(() -> {
             HttpURLConnection conn = null;
             try {
-                // Determine URL based on mode
                 URL url = new URL(registrationMode
                         ? "https://bazicloud.com/wp-json/amncloud/v1/complete-registration"
-                        : "https://bazicloud.com/wp-json/amncloud/v1/verify-code"); // Assuming this endpoint exists
+                        : "https://bazicloud.com/wp-json/amncloud/v1/verify-code");
 
                 conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("POST");
@@ -554,9 +517,9 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
 
                  String responseString = "";
                  if (inputStream != null) {
-                     try (Scanner scanner = new Scanner(inputStream, "UTF-8")) {
-                         responseString = scanner.useDelimiter("\\A").next();
-                     }
+                      try (Scanner scanner = new Scanner(inputStream, "UTF-8")) {
+                           responseString = scanner.useDelimiter("\\A").next();
+                      }
                  } else {
                       Log.w("verifyCode", "InputStream was null for response code: " + responseCode);
                  }
@@ -565,67 +528,57 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
                 final String finalResponseString = responseString;
 
                 runOnUiThread(() -> {
-                    // Always stop the timer after verification attempt
                     if (timer != null) {
                          timer.cancel();
                          timer = null;
                     }
                     timerText.setVisibility(View.GONE);
-                    resendCodeButton.setVisibility(View.GONE); // Hide resend button
+                    resendCodeButton.setVisibility(View.GONE);
 
 
                     JSONObject responseJson = null;
                     boolean success = false;
-                    String apiMessage = "کد اشتباه یا منقضی شده"; // Default error
+                    String apiMessage = "کد اشتباه یا منقضی شده";
 
                      try {
-                         if (!finalResponseString.isEmpty()) {
-                              responseJson = new JSONObject(finalResponseString);
-                               // Check success only for 200 OK
-                              if (finalResponseCode == 200) {
-                                   success = responseJson.optBoolean("success", false);
-                              }
-                              // Try to get a more specific message even on error
-                              apiMessage = responseJson.optString("message", apiMessage);
-                         }
-                    } catch (Exception parseEx) {
-                         Log.e("verifyCode", "Error parsing JSON response", parseEx);
-                         apiMessage = "خطای نامشخص در پاسخ سرور (" + finalResponseCode + ")";
-                    }
+                          if (!finalResponseString.isEmpty()) {
+                                 responseJson = new JSONObject(finalResponseString);
+                                if (finalResponseCode == 200) {
+                                    success = responseJson.optBoolean("success", false);
+                                }
+                                apiMessage = responseJson.optString("message", apiMessage);
+                          }
+                     } catch (Exception parseEx) {
+                          Log.e("verifyCode", "Error parsing JSON response", parseEx);
+                          apiMessage = "خطای نامشخص در پاسخ سرور (" + finalResponseCode + ")";
+                     }
 
 
                     if (finalResponseCode == 200 && success) {
                         statusText.setText(registrationMode ? "ثبت‌نام و ورود موفقیت‌آمیز" : "ورود موفقیت‌آمیز");
 
-                        // --- Save Login State ---
                         SharedPreferences prefs = getSharedPreferences("amnyar", MODE_PRIVATE);
                         SharedPreferences.Editor editor = prefs.edit();
                         editor.putBoolean("is_logged_in", true);
 
-                        // Optionally save user data received from API if available
                         if (responseJson != null && responseJson.has("data")) {
                              JSONObject userData = responseJson.optJSONObject("data");
                              if (userData != null) {
                                  editor.putInt("user_id", userData.optInt("user_id", -1));
                                  editor.putString("display_name", userData.optString("display_name", ""));
                                  editor.putString("email", userData.optString("email", ""));
-                                 // Add other fields if needed
                              }
                         }
                         editor.apply();
-                        // --- End Save Login State ---
 
 
                         startActivity(new Intent(HomePhoneLoginActivity.this, PcView.class));
-                        finish(); // Close this login activity
+                        finish();
                     } else {
-                        // Handle verification failure
-                        statusText.setText(apiMessage); // Show specific error from API or default
-                        verifyButton.setEnabled(true); // Re-enable button to allow retry
-                         // Maybe show resend button again? Depends on UX choice
-                         // If code is wrong, user might need to resend.
+                        statusText.setText(apiMessage);
+                        verifyButton.setEnabled(true);
                          resendCodeButton.setVisibility(View.VISIBLE);
-                         resendCodeButton.setEnabled(true); // Enable resend on failure
+                         resendCodeButton.setEnabled(true);
                          resendCodeButton.setAlpha(1.0f);
                          resendCodeButton.setTextColor(Color.parseColor("#000000"));
                     }
@@ -633,21 +586,20 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
 
             } catch (Exception e) {
                  Log.e("verifyCode", "Network or processing error", e);
-                runOnUiThread(() -> {
-                     // UI reset in case of network/unexpected error
-                     if (timer != null) {
-                          timer.cancel();
-                          timer = null;
-                     }
-                     timerText.setVisibility(View.GONE);
-                     resendCodeButton.setVisibility(View.GONE);
-                     verifyButton.setEnabled(true); // Re-enable verify button
+                 runOnUiThread(() -> {
+                      if (timer != null) {
+                           timer.cancel();
+                           timer = null;
+                      }
+                      timerText.setVisibility(View.GONE);
+                      resendCodeButton.setVisibility(View.GONE);
+                      verifyButton.setEnabled(true);
 
-                    statusText.setText("خطا در بررسی کد");
-                });
+                     statusText.setText("خطا در بررسی کد");
+                 });
             } finally {
                  if (conn != null) {
-                     conn.disconnect();
+                      conn.disconnect();
                  }
             }
         }).start();
@@ -655,42 +607,40 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
 
 
     private void startTimer() {
-         // Cancel any existing timer first
-         if (timer != null) {
+        if (timer != null) {
              timer.cancel();
-         }
+        }
 
-        secondsRemaining = 59; // Reset seconds
+        secondsRemaining = 59;
         timerText.setText("ارسال مجدد تا " + secondsRemaining + " ثانیه دیگر");
-        timerText.setVisibility(View.VISIBLE); // Show timer text
+        timerText.setVisibility(View.VISIBLE);
 
-        resendCodeButton.setEnabled(false); // Disable resend button initially
+        resendCodeButton.setEnabled(false);
         resendCodeButton.setAlpha(0.4f);
         resendCodeButton.setTextColor(Color.parseColor("#AAAAAA"));
-        resendCodeButton.setVisibility(View.GONE); // Hide resend button initially, show on finish
+        resendCodeButton.setVisibility(View.GONE);
 
 
         timer = new CountDownTimer(59000, 1000) {
             @Override
             public void onTick(long millisUntilFinished) {
                 secondsRemaining--;
-                 if (secondsRemaining >= 0) { // Prevent showing negative number
+                 if (secondsRemaining >= 0) {
                     timerText.setText("ارسال مجدد تا " + secondsRemaining + " ثانیه دیگر");
                  } else {
-                     timerText.setText("ارسال مجدد تا ۰ ثانیه دیگر"); // Show 0 at the end
+                     timerText.setText("ارسال مجدد تا ۰ ثانیه دیگر");
                  }
-                 // Keep resend hidden during countdown
                  resendCodeButton.setVisibility(View.GONE);
             }
 
             @Override
             public void onFinish() {
-                timer = null; // Timer is finished
+                timer = null;
                 resendCodeButton.setEnabled(true);
                 resendCodeButton.setAlpha(1.0f);
-                resendCodeButton.setTextColor(Color.parseColor("#000000")); // Assuming black for enabled text
-                resendCodeButton.setVisibility(View.VISIBLE); // Show resend button
-                timerText.setVisibility(View.GONE); // Hide timer text
+                resendCodeButton.setTextColor(Color.parseColor("#000000"));
+                resendCodeButton.setVisibility(View.VISIBLE);
+                timerText.setVisibility(View.GONE);
             }
         }.start();
     }
@@ -698,7 +648,6 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
      @Override
      protected void onDestroy() {
          super.onDestroy();
-         // Cancel timer if activity is destroyed to prevent leaks
          if (timer != null) {
              timer.cancel();
              timer = null;

@@ -154,15 +154,6 @@
             android:background="@drawable/btn_resend_background"
             android:layout_marginBottom="12dp" />
 
-        <ImageView
-            android:id="@+id/bottomImage"
-            android:layout_width="75dp"
-            android:layout_height="75dp"
-            android:src="@drawable/bottom_image"
-            android:layout_marginTop="50dp"
-            android:layout_marginBottom="50dp"
-            android:layout_gravity="center_horizontal"
-            android:contentDescription="Bottom Decorative Image" />
 
         <Button
             android:id="@+id/backToLoginButton"
@@ -173,6 +164,17 @@
             android:textColor="#FFFFFF"
             android:background="@drawable/btn_register_background"
             android:layout_marginBottom="20dp" />
+			
+
+        <ImageView
+            android:id="@+id/bottomImage"
+            android:layout_width="75dp"
+            android:layout_height="75dp"
+            android:src="@drawable/bottom_image"
+            android:layout_marginTop="50dp"
+            android:layout_marginBottom="50dp"
+            android:layout_gravity="center_horizontal"
+            android:contentDescription="Bottom Decorative Image" />
 
     </LinearLayout>
 </ScrollView>

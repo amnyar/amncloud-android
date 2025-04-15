@@ -1,788 +1,480 @@
 package com.limelight;
 
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.net.UnknownHostException;
-
-import com.limelight.binding.PlatformBinding;
-import com.limelight.binding.crypto.AndroidCryptoProvider;
-import com.limelight.computers.ComputerManagerListener;
-import com.limelight.computers.ComputerManagerService;
-import com.limelight.grid.PcGridAdapter;
-import com.limelight.grid.assets.DiskAssetLoader;
-import com.limelight.nvstream.http.ComputerDetails;
-import com.limelight.nvstream.http.NvApp;
-import com.limelight.nvstream.http.NvHTTP;
-import com.limelight.nvstream.http.PairingManager;
-import com.limelight.nvstream.http.PairingManager.PairState;
-import com.limelight.nvstream.wol.WakeOnLanSender;
-import com.limelight.preferences.AddComputerManually;
-import com.limelight.preferences.GlPreferences;
-import com.limelight.preferences.PreferenceConfiguration;
-import com.limelight.preferences.StreamSettings;
-import com.limelight.ui.AdapterFragment;
-import com.limelight.ui.AdapterFragmentCallbacks;
-import com.limelight.utils.Dialog;
-import com.limelight.utils.HelpLauncher;
-import com.limelight.utils.ServerHelper;
-import com.limelight.utils.ShortcutHelper;
-import com.limelight.utils.UiHelper;
-
+// ===== Essential Imports =====
 import android.app.Activity;
-import android.app.ActivityManager;
-import android.app.Service;
-import android.content.ComponentName;
 import android.content.Intent;
-import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
-import android.opengl.GLSurfaceView;
-import android.os.Build;
+// import android.os.Build; // Not using SDK 33+ features for now
 import android.os.Bundle;
-import android.os.IBinder;
-import android.preference.PreferenceManager;
-import android.view.ContextMenu;
-import android.view.Menu;
-import android.view.MenuItem;
+// import android.preference.PreferenceManager; // Keep if R.xml.preferences used
+import android.util.Log;
 import android.view.View;
-import android.view.ContextMenu.ContextMenuInfo;
-import android.view.View.OnClickListener;
-import android.widget.AbsListView;
-import android.widget.AdapterView;
-import android.widget.AdapterView.OnItemClickListener;
 import android.widget.ImageButton;
-import android.widget.RelativeLayout;
+import android.widget.ProgressBar;
+import android.widget.RelativeLayout; // Keep if pcFragmentContainer is used
+import android.widget.TextView;
 import android.widget.Toast;
-import android.widget.AdapterView.AdapterContextMenuInfo;
 
-import org.xmlpull.v1.XmlPullParserException;
+// ===== Security Imports =====
+import androidx.security.crypto.EncryptedSharedPreferences;
+import androidx.security.crypto.MasterKey;
 
-import javax.microedition.khronos.egl.EGLConfig;
-import javax.microedition.khronos.opengles.GL10;
+// ===== JSON Import =====
+import org.json.JSONObject;
 
-public class PcView extends Activity implements AdapterFragmentCallbacks {
-    private RelativeLayout noPcFoundLayout;
-    private PcGridAdapter pcGridAdapter;
-    private ShortcutHelper shortcutHelper;
-    private ComputerManagerService.ComputerManagerBinder managerBinder;
-    private boolean freezeUpdates, runningPolling, inForeground, completeOnCreateCalled;
-    private final ServiceConnection serviceConnection = new ServiceConnection() {
-        public void onServiceConnected(ComponentName className, IBinder binder) {
-            final ComputerManagerService.ComputerManagerBinder localBinder =
-                    ((ComputerManagerService.ComputerManagerBinder)binder);
+// ===== Networking Imports =====
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.InetAddress;
+import java.net.URL;
+import java.net.UnknownHostException;
+import java.security.GeneralSecurityException;
+import java.util.Scanner;
+import java.util.UUID;
 
-            // Wait in a separate thread to avoid stalling the UI
-            new Thread() {
-                @Override
-                public void run() {
-                    // Wait for the binder to be ready
-                    localBinder.waitForReady();
+// ===== Limelight Specific Imports (Required by new logic) =====
+import com.limelight.nvstream.http.ComputerDetails;
+import com.limelight.nvstream.http.PairingManager; // For PairState enum
+import com.limelight.preferences.StreamSettings; // For Settings Button
+import com.limelight.utils.Dialog; // For Dialogs used in onStop maybe
+import com.limelight.utils.HelpLauncher; // For Help Button
+import com.limelight.utils.UiHelper; // For Locale and RootView notification
+import com.limelight.AppView; // For navigating to game list
 
-                    // Now make the binder visible
-                    managerBinder = localBinder;
 
-                    // Start updates
-                    startComputerUpdates();
+public class PcView extends Activity { // NOTE: No AdapterFragmentCallbacks
 
-                    // Force a keypair to be generated early to avoid discovery delays
-                    new AndroidCryptoProvider(PcView.this).getClientCertificate();
-                }
-            }.start();
-        }
+    // Views for loading status
+    private ProgressBar loadingIndicator;
+    private TextView statusTextView;
 
-        public void onServiceDisconnected(ComponentName className) {
-            managerBinder = null;
-        }
-    };
+    private boolean isServerInfoFetched = false;
+
+    // Constants for secure storage
+    private static final String SECURE_PREFS_NAME = "amnyar_secure_prefs";
+    private static final String KEY_IS_LOGGED_IN = "is_logged_in";
+    private static final String KEY_USER_ID = "user_id";
+    private static final String KEY_AUTH_TOKEN = "auth_token";
+    // Keep only necessary keys, remove others if not used in this Activity
+    private static final String KEY_PHONE_NUMBER = "phone_number";
+    private static final String KEY_DISPLAY_NAME = "display_name";
+    private static final String KEY_EMAIL = "email";
+    private static final int DEFAULT_SERVER_PORT = 47989; // Default port
+
 
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        // Re-initialize views after config change
+        initializeViews();
+    }
 
-        // Only reinitialize views if completeOnCreate() was called
-        // before this callback. If it was not, completeOnCreate() will
-        // handle initializing views with the config change accounted for.
-        // This is not prone to races because both callbacks are invoked
-        // in the main thread.
-        if (completeOnCreateCalled) {
-            // Reinitialize views just in case orientation changed
-            initializeViews();
+    private SharedPreferences getSecurePrefs() {
+        try {
+            MasterKey masterKey = new MasterKey.Builder(getApplicationContext())
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build();
+
+            return EncryptedSharedPreferences.create(
+                    getApplicationContext(),
+                    SECURE_PREFS_NAME,
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            );
+        } catch (GeneralSecurityException | IOException e) {
+            Log.e("PcView", "Failed to get EncryptedSharedPreferences", e);
+            Toast.makeText(this, "خطای داخلی ذخیره‌سازی امن", Toast.LENGTH_LONG).show();
+            logoutUser(); // Log out on critical error
+            return null;
         }
     }
 
-    private final static int PAIR_ID = 2;
-    private final static int UNPAIR_ID = 3;
-    private final static int WOL_ID = 4;
-    private final static int DELETE_ID = 5;
-    private final static int RESUME_ID = 6;
-    private final static int QUIT_ID = 7;
-    private final static int VIEW_DETAILS_ID = 8;
-    private final static int FULL_APP_LIST_ID = 9;
-    private final static int TEST_NETWORK_ID = 10;
-    private final static int GAMESTREAM_EOL_ID = 11;
-
     private void initializeViews() {
-        setContentView(R.layout.activity_pc_view);
+         // Ensure layout is set only once
+         View rootView = findViewById(android.R.id.content);
+         if (rootView == null || rootView.getTag() == null || !(rootView.getTag() instanceof Boolean) || !(Boolean)rootView.getTag()) {
+             setContentView(R.layout.activity_pc_view);
+             findViewById(android.R.id.content).setTag(true); // Mark as initialized
+             // Ensure UiHelper is initialized if needed here, maybe move call to onCreate after setContentView?
+             // UiHelper.notifyNewRootView(this);
+         }
 
-        UiHelper.notifyNewRootView(this);
 
-        // Allow floating expanded PiP overlays while browsing PCs
+        /* // Commented out for compatibility
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             setShouldDockBigOverlays(false);
         }
+        */
 
-        // Set default preferences if we've never been run
-        PreferenceManager.setDefaultValues(this, R.xml.preferences, false);
+        // Keep this if R.xml.preferences exists and is needed elsewhere indirectly
+        // PreferenceManager.setDefaultValues(this, R.xml.preferences, false);
 
-        // Set the correct layout for the PC grid
-        pcGridAdapter.updateLayoutWithPreferences(this, PreferenceConfiguration.readPreferences(this));
+        // Find necessary views defined in the XML
+        loadingIndicator = findViewById(R.id.loadingIndicator); // Ensure this ID exists
+        statusTextView = findViewById(R.id.statusTextView); // Ensure this ID exists
 
-        // Setup the list view
+        // Hide the old layout explicitly if still present in XML
+        View noPcFoundLayoutOriginal = findViewById(R.id.no_pc_found_layout);
+        if (noPcFoundLayoutOriginal != null) {
+             noPcFoundLayoutOriginal.setVisibility(View.GONE);
+        }
+
+        // Set initial UI state based on whether API call has started/finished
+        if (!isServerInfoFetched) {
+             if (loadingIndicator != null) loadingIndicator.setVisibility(View.VISIBLE);
+             if (statusTextView != null) {
+                statusTextView.setText("درحال دریافت اطلاعات سرور...");
+                statusTextView.setVisibility(View.VISIBLE);
+             }
+        } else {
+             if (loadingIndicator != null) loadingIndicator.setVisibility(View.GONE);
+             // Status text visibility handled by handleApiResponse
+        }
+
+        // Keep top buttons
         ImageButton settingsButton = findViewById(R.id.settingsButton);
-        ImageButton addComputerButton = findViewById(R.id.manuallyAddPc);
+        ImageButton addComputerButton = findViewById(R.id.manuallyAddPc); // Rename ID later
         ImageButton helpButton = findViewById(R.id.helpButton);
 
-        settingsButton.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                startActivity(new Intent(PcView.this, StreamSettings.class));
-            }
-        });
-        addComputerButton.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Intent i = new Intent(PcView.this, AddComputerManually.class);
-                startActivity(i);
-            }
-        });
-        helpButton.setOnClickListener(new OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                HelpLauncher.launchSetupGuide(PcView.this);
-            }
-        });
+         // Add null checks before setting listeners
+         if (settingsButton != null) {
+             settingsButton.setOnClickListener(v ->
+                 startActivity(new Intent(PcView.this, StreamSettings.class))
+             );
+         } else { Log.e("PcView", "settingsButton not found!"); }
 
-        // Amazon review didn't like the help button because the wiki was not entirely
-        // navigable via the Fire TV remote (though the relevant parts were). Let's hide
-        // it on Fire TV.
-        if (getPackageManager().hasSystemFeature("amazon.hardware.fire_tv")) {
-            helpButton.setVisibility(View.GONE);
-        }
+         if (addComputerButton != null) {
+             addComputerButton.setOnClickListener(v -> {
+                 Toast.makeText(PcView.this, "دکمه پیشخوان - به زودی!", Toast.LENGTH_SHORT).show();
+                 // TODO: Launch Dashboard
+             });
+         } else { Log.e("PcView", "manuallyAddPc button not found!"); }
 
-        getFragmentManager().beginTransaction()
-            .replace(R.id.pcFragmentContainer, new AdapterFragment())
-            .commitAllowingStateLoss();
-
-        noPcFoundLayout = findViewById(R.id.no_pc_found_layout);
-        if (pcGridAdapter.getCount() == 0) {
-            noPcFoundLayout.setVisibility(View.VISIBLE);
-        }
-        else {
-            noPcFoundLayout.setVisibility(View.INVISIBLE);
-        }
-        pcGridAdapter.notifyDataSetChanged();
+         if (helpButton != null) {
+             helpButton.setOnClickListener(v ->
+                  HelpLauncher.launchSetupGuide(PcView.this) // Ensure HelpLauncher doesn't cause issues
+             );
+             try {
+                  if (getPackageManager().hasSystemFeature("amazon.hardware.fire_tv")) {
+                      helpButton.setVisibility(View.GONE);
+                  }
+             } catch (Exception e) { Log.e("PcView", "Error checking Fire TV feature", e); }
+         } else { Log.e("PcView", "helpButton not found!"); }
     }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        UiHelper.setLocale(this); // Set locale early
+        // Set Content View ONCE here
+        setContentView(R.layout.activity_pc_view);
+        UiHelper.notifyNewRootView(this); // Notify after setting main view
+        initializeViews(); // Initialize views after setting content view
 
-        // Assume we're in the foreground when created to avoid a race
-        // between binding to CMS and onResume()
-        inForeground = true;
-
-        // Create a GLSurfaceView to fetch GLRenderer unless we have
-        // a cached result already.
-        final GlPreferences glPrefs = GlPreferences.readPreferences(this);
-        if (!glPrefs.savedFingerprint.equals(Build.FINGERPRINT) || glPrefs.glRenderer.isEmpty()) {
-            GLSurfaceView surfaceView = new GLSurfaceView(this);
-            surfaceView.setRenderer(new GLSurfaceView.Renderer() {
-                @Override
-                public void onSurfaceCreated(GL10 gl10, EGLConfig eglConfig) {
-                    // Save the GLRenderer string so we don't need to do this next time
-                    glPrefs.glRenderer = gl10.glGetString(GL10.GL_RENDERER);
-                    glPrefs.savedFingerprint = Build.FINGERPRINT;
-                    glPrefs.writePreferences();
-
-                    LimeLog.info("Fetched GL Renderer: " + glPrefs.glRenderer);
-
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            completeOnCreate();
-                        }
-                    });
-                }
-
-                @Override
-                public void onSurfaceChanged(GL10 gl10, int i, int i1) {
-                }
-
-                @Override
-                public void onDrawFrame(GL10 gl10) {
-                }
-            });
-            setContentView(surfaceView);
-        }
-        else {
-            LimeLog.info("Cached GL Renderer: " + glPrefs.glRenderer);
-            completeOnCreate();
+        // Fetch server info only once
+        if (!isServerInfoFetched) {
+            fetchServerInfoFromApi();
         }
     }
 
-    private void completeOnCreate() {
-        completeOnCreateCalled = true;
 
-        shortcutHelper = new ShortcutHelper(this);
-
-        UiHelper.setLocale(this);
-
-        // Bind to the computer manager service
-        bindService(new Intent(PcView.this, ComputerManagerService.class), serviceConnection,
-                Service.BIND_AUTO_CREATE);
-
-        pcGridAdapter = new PcGridAdapter(this, PreferenceConfiguration.readPreferences(this));
-
-        initializeViews();
-    }
-
-    private void startComputerUpdates() {
-        // Only allow polling to start if we're bound to CMS, polling is not already running,
-        // and our activity is in the foreground.
-        if (managerBinder != null && !runningPolling && inForeground) {
-            freezeUpdates = false;
-            managerBinder.startPolling(new ComputerManagerListener() {
-                @Override
-                public void notifyComputerUpdated(final ComputerDetails details) {
-                    if (!freezeUpdates) {
-                        PcView.this.runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                updateComputer(details);
-                            }
-                        });
-
-                        // Add a launcher shortcut for this PC (off the main thread to prevent ANRs)
-                        if (details.pairState == PairState.PAIRED) {
-                            shortcutHelper.createAppViewShortcutForOnlineHost(details);
-                        }
-                    }
-                }
-            });
-            runningPolling = true;
-        }
-    }
-
-    private void stopComputerUpdates(boolean wait) {
-        if (managerBinder != null) {
-            if (!runningPolling) {
-                return;
-            }
-
-            freezeUpdates = true;
-
-            managerBinder.stopPolling();
-
-            if (wait) {
-                managerBinder.waitForPollingStopped();
-            }
-
-            runningPolling = false;
-        }
-    }
-
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-
-        if (managerBinder != null) {
-            unbindService(serviceConnection);
-        }
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-
-        // Display a decoder crash notification if we've returned after a crash
-        UiHelper.showDecoderCrashDialog(this);
-
-        inForeground = true;
-        startComputerUpdates();
-    }
-
-    @Override
-    protected void onPause() {
-        super.onPause();
-
-        inForeground = false;
-        stopComputerUpdates(false);
-    }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-
-        Dialog.closeDialogs();
-    }
-
-    @Override
-    public void onCreateContextMenu(ContextMenu menu, View v, ContextMenuInfo menuInfo) {
-        stopComputerUpdates(false);
-
-        // Call superclass
-        super.onCreateContextMenu(menu, v, menuInfo);
-                
-        AdapterContextMenuInfo info = (AdapterContextMenuInfo) menuInfo;
-        ComputerObject computer = (ComputerObject) pcGridAdapter.getItem(info.position);
-
-        // Add a header with PC status details
-        menu.clearHeader();
-        String headerTitle = computer.details.name + " - ";
-        switch (computer.details.state)
-        {
-            case ONLINE:
-                headerTitle += getResources().getString(R.string.pcview_menu_header_online);
-                break;
-            case OFFLINE:
-                menu.setHeaderIcon(R.drawable.ic_pc_offline);
-                headerTitle += getResources().getString(R.string.pcview_menu_header_offline);
-                break;
-            case UNKNOWN:
-                headerTitle += getResources().getString(R.string.pcview_menu_header_unknown);
-                break;
-        }
-
-        menu.setHeaderTitle(headerTitle);
-
-        // Inflate the context menu
-        if (computer.details.state == ComputerDetails.State.OFFLINE ||
-            computer.details.state == ComputerDetails.State.UNKNOWN) {
-            menu.add(Menu.NONE, WOL_ID, 1, getResources().getString(R.string.pcview_menu_send_wol));
-            menu.add(Menu.NONE, GAMESTREAM_EOL_ID, 2, getResources().getString(R.string.pcview_menu_eol));
-        }
-        else if (computer.details.pairState != PairState.PAIRED) {
-            menu.add(Menu.NONE, PAIR_ID, 1, getResources().getString(R.string.pcview_menu_pair_pc));
-            if (computer.details.nvidiaServer) {
-                menu.add(Menu.NONE, GAMESTREAM_EOL_ID, 2, getResources().getString(R.string.pcview_menu_eol));
-            }
-        }
-        else {
-            if (computer.details.runningGameId != 0) {
-                menu.add(Menu.NONE, RESUME_ID, 1, getResources().getString(R.string.applist_menu_resume));
-                menu.add(Menu.NONE, QUIT_ID, 2, getResources().getString(R.string.applist_menu_quit));
-            }
-
-            if (computer.details.nvidiaServer) {
-                menu.add(Menu.NONE, GAMESTREAM_EOL_ID, 3, getResources().getString(R.string.pcview_menu_eol));
-            }
-
-            menu.add(Menu.NONE, FULL_APP_LIST_ID, 4, getResources().getString(R.string.pcview_menu_app_list));
-        }
-
-        menu.add(Menu.NONE, TEST_NETWORK_ID, 5, getResources().getString(R.string.pcview_menu_test_network));
-        menu.add(Menu.NONE, DELETE_ID, 6, getResources().getString(R.string.pcview_menu_delete_pc));
-        menu.add(Menu.NONE, VIEW_DETAILS_ID, 7,  getResources().getString(R.string.pcview_menu_details));
-    }
-
-    @Override
-    public void onContextMenuClosed(Menu menu) {
-        // For some reason, this gets called again _after_ onPause() is called on this activity.
-        // startComputerUpdates() manages this and won't actual start polling until the activity
-        // returns to the foreground.
-        startComputerUpdates();
-    }
-
-    private void doPair(final ComputerDetails computer) {
-        if (computer.state == ComputerDetails.State.OFFLINE || computer.activeAddress == null) {
-            Toast.makeText(PcView.this, getResources().getString(R.string.pair_pc_offline), Toast.LENGTH_SHORT).show();
+    private void fetchServerInfoFromApi() {
+        if (isServerInfoFetched) {
+            Log.d("PcView", "Server info already fetched or fetch in progress.");
             return;
         }
-        if (managerBinder == null) {
-            Toast.makeText(PcView.this, getResources().getString(R.string.error_manager_not_running), Toast.LENGTH_LONG).show();
+        isServerInfoFetched = true; // Mark as fetching
+
+        SharedPreferences prefs = getSecurePrefs();
+        if (prefs == null) {
+             isServerInfoFetched = false; // Reset flag if prefs fail
+             return; // Logout called in getSecurePrefs
+        }
+
+        int userId = prefs.getInt(KEY_USER_ID, -1);
+        String authToken = prefs.getString(KEY_AUTH_TOKEN, null);
+
+        if (userId == -1 || authToken == null) {
+            Log.e("PcView", "User ID or Auth Token not found in secure prefs.");
+            Toast.makeText(this, "خطا: اطلاعات ورود یافت نشد. لطفاً دوباره وارد شوید.", Toast.LENGTH_LONG).show();
+            logoutUser();
             return;
         }
 
-        Toast.makeText(PcView.this, getResources().getString(R.string.pairing), Toast.LENGTH_SHORT).show();
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                NvHTTP httpConn;
-                String message;
-                boolean success = false;
+        // Ensure UI state shows loading
+        if (loadingIndicator != null) loadingIndicator.setVisibility(View.VISIBLE);
+        if (statusTextView != null) {
+             statusTextView.setText("درحال دریافت اطلاعات سرور...");
+             statusTextView.setVisibility(View.VISIBLE);
+        }
+
+
+        new Thread(() -> {
+            HttpURLConnection conn = null;
+            String responseString = "";
+            int responseCode = -1;
+
+            try {
+                URL url = new URL("https://bazicloud.com/wp-json/amncloud/v1/get-server-info");
+                conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setRequestProperty("X-User-ID", String.valueOf(userId));
+                conn.setRequestProperty("X-Auth-Token", authToken);
+                conn.setConnectTimeout(15000);
+                conn.setReadTimeout(15000);
+
+                responseCode = conn.getResponseCode();
+                InputStream inputStream;
+                if (responseCode >= 200 && responseCode < 400) {
+                    inputStream = conn.getInputStream();
+                } else {
+                    inputStream = conn.getErrorStream();
+                }
+
+                 if (inputStream != null) {
+                       try (Scanner scanner = new Scanner(inputStream, "UTF-8")) {
+                            responseString = scanner.useDelimiter("\\A").next();
+                       } finally {
+                            try { inputStream.close(); } catch (IOException ioException) { Log.e("PcView", "Error closing input stream", ioException); }
+                       }
+                 } else {
+                       Log.w("PcView", "InputStream was null for response code: " + responseCode);
+                 }
+
+            } catch (Exception e) {
+                 Log.e("PcView", "Network error fetching server info", e);
+                 responseCode = -1; // Indicate network error
+                 responseString = "Network error: " + e.getMessage();
+            } finally {
+                 if (conn != null) {
+                     conn.disconnect();
+                 }
+                 final int finalResponseCode = responseCode;
+                 final String finalResponseString = responseString;
+                 // Post result back to main thread
+                 runOnUiThread(() -> handleApiResponse(finalResponseCode, finalResponseString));
+            }
+        }).start();
+    }
+
+    private void handleApiResponse(int responseCode, String responseString) {
+
+        // API call attempt finished, hide loading indicator
+        if (loadingIndicator != null) loadingIndicator.setVisibility(View.GONE);
+
+        // Handle network error first
+        if (responseCode == -1) {
+             if (statusTextView != null) {
+                 statusTextView.setText("خطا در ارتباط با سرور.");
+                 statusTextView.setVisibility(View.VISIBLE);
+             }
+             isServerInfoFetched = false; // Allow retry on network error
+             return;
+        }
+
+        JSONObject responseJson = null;
+        boolean success = false;
+        String apiMessage = "خطا در دریافت اطلاعات سرور";
+        JSONObject serverData = null;
+
+        try {
+             if (!responseString.isEmpty()) {
+                  responseJson = new JSONObject(responseString);
+                  if (responseCode == 200) {
+                       success = responseJson.optBoolean("success", false);
+                       if(success) {
+                           serverData = responseJson.optJSONObject("server");
+                       }
+                  }
+                  // Always try to get a message from the response
+                  apiMessage = responseJson.optString("message", apiMessage);
+             } else {
+                 apiMessage = "پاسخ خالی از سرور (" + responseCode + ")";
+             }
+        } catch (Exception e) {
+             Log.e("PcView", "Error parsing server info JSON response", e);
+             apiMessage = "پاسخ سرور نامعتبر است (" + responseCode + ")";
+        }
+
+        // Handle specific authentication failure (invalid token)
+        if (responseCode == 401 || responseCode == 403) {
+             Log.e("PcView", "Authentication failed ("+ responseCode + "): " + apiMessage);
+             Toast.makeText(this, "نشست شما نامعتبر است. لطفاً دوباره وارد شوید.", Toast.LENGTH_LONG).show();
+             logoutUser(); // Force logout
+             return;
+        }
+
+        // Handle successful response with server data
+        if (success && serverData != null) {
+            String serverIp = serverData.optString("ip", null);
+            String serverName = serverData.optString("name", "Game Server");
+            int serverPort = serverData.optInt("port", -1);
+            int serverId = serverData.optInt("id", 0); // Get server ID if available
+
+            if (serverIp != null) {
+                // Create ComputerDetails for AppView
+                String pseudoUuid = serverId != 0
+                                    ? "server-" + serverId // Use server ID for a simple unique ID
+                                    : UUID.nameUUIDFromBytes(serverIp.getBytes()).toString(); // Fallback
+
+                ComputerDetails computer = new ComputerDetails();
+                computer.uuid = pseudoUuid;
+                computer.name = serverName;
+                computer.state = ComputerDetails.State.ONLINE; // Assume ONLINE if received from API
+                computer.pairState = PairingManager.PairState.PAIRED; // Assume PAIRED for now
+                if(serverPort != -1) {
+                   computer.httpsPort = serverPort; // Assign port if available
+                }
+
                 try {
-                    // Stop updates and wait while pairing
-                    stopComputerUpdates(true);
+                     // Set activeAddress using the STATIC inner class constructor
+                    InetAddress inetAddress = InetAddress.getByName(serverIp);
+                    int portForTuple = (serverPort != -1) ? serverPort : DEFAULT_SERVER_PORT; // Use defined constant
+                    String ipString = inetAddress.getHostAddress();
+                    ComputerDetails.AddressTuple tuple = new ComputerDetails.AddressTuple(ipString, portForTuple);
+                    computer.activeAddress = tuple; // Assign
 
-                    httpConn = new NvHTTP(ServerHelper.getCurrentAddressFromComputer(computer),
-                            computer.httpsPort, managerBinder.getUniqueId(), computer.serverCert,
-                            PlatformBinding.getCryptoProvider(PcView.this));
-                    if (httpConn.getPairState() == PairState.PAIRED) {
-                        // Don't display any toast, but open the app list
-                        message = null;
-                        success = true;
-                    }
-                    else {
-                        final String pinStr = PairingManager.generatePinString();
-
-                        // Spin the dialog off in a thread because it blocks
-                        Dialog.displayDialog(PcView.this, getResources().getString(R.string.pair_pairing_title),
-                                getResources().getString(R.string.pair_pairing_msg)+" "+pinStr+"\n\n"+
-                                getResources().getString(R.string.pair_pairing_help), false);
-
-                        PairingManager pm = httpConn.getPairingManager();
-
-                        PairState pairState = pm.pair(httpConn.getServerInfo(true), pinStr);
-                        if (pairState == PairState.PIN_WRONG) {
-                            message = getResources().getString(R.string.pair_incorrect_pin);
-                        }
-                        else if (pairState == PairState.FAILED) {
-                            if (computer.runningGameId != 0) {
-                                message = getResources().getString(R.string.pair_pc_ingame);
-                            }
-                            else {
-                                message = getResources().getString(R.string.pair_fail);
-                            }
-                        }
-                        else if (pairState == PairState.ALREADY_IN_PROGRESS) {
-                            message = getResources().getString(R.string.pair_already_in_progress);
-                        }
-                        else if (pairState == PairState.PAIRED) {
-                            // Just navigate to the app view without displaying a toast
-                            message = null;
-                            success = true;
-
-                            // Pin this certificate for later HTTPS use
-                            managerBinder.getComputer(computer.uuid).serverCert = pm.getPairedCert();
-
-                            // Invalidate reachability information after pairing to force
-                            // a refresh before reading pair state again
-                            managerBinder.invalidateStateForComputer(computer.uuid);
-                        }
-                        else {
-                            // Should be no other values
-                            message = null;
-                        }
-                    }
                 } catch (UnknownHostException e) {
-                    message = getResources().getString(R.string.error_unknown_host);
-                } catch (FileNotFoundException e) {
-                    message = getResources().getString(R.string.error_404);
-                } catch (XmlPullParserException | IOException e) {
-                    e.printStackTrace();
-                    message = e.getMessage();
+                     Log.e("PcView", "Invalid IP address received from API: " + serverIp, e);
+                     if (statusTextView != null) {
+                         statusTextView.setText("آدرس IP سرور نامعتبر است.");
+                         statusTextView.setVisibility(View.VISIBLE);
+                     }
+                     isServerInfoFetched = false; // Allow retry maybe
+                     return; // Stop
+                } catch (Exception e_inner) {
+                     Log.e("PcView", "Failed to create static AddressTuple", e_inner);
+                     if (statusTextView != null) {
+                          statusTextView.setText("خطا در ساخت آدرس سرور.");
+                          statusTextView.setVisibility(View.VISIBLE);
+                     }
+                     isServerInfoFetched = false;
+                     return;
                 }
 
-                Dialog.closeDialogs();
+                // Navigate to AppView
+                onServerInfoReceived(computer);
 
-                final String toastMessage = message;
-                final boolean toastSuccess = success;
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (toastMessage != null) {
-                            Toast.makeText(PcView.this, toastMessage, Toast.LENGTH_LONG).show();
-                        }
-
-                        if (toastSuccess) {
-                            // Open the app list after a successful pairing attempt
-                            doAppList(computer, true, false);
-                        }
-                        else {
-                            // Start polling again if we're still in the foreground
-                            startComputerUpdates();
-                        }
-                    }
-                });
-            }
-        }).start();
-    }
-
-    private void doWakeOnLan(final ComputerDetails computer) {
-        if (computer.state == ComputerDetails.State.ONLINE) {
-            Toast.makeText(PcView.this, getResources().getString(R.string.wol_pc_online), Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        if (computer.macAddress == null) {
-            Toast.makeText(PcView.this, getResources().getString(R.string.wol_no_mac), Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                String message;
-                try {
-                    WakeOnLanSender.sendWolPacket(computer);
-                    message = getResources().getString(R.string.wol_waking_msg);
-                } catch (IOException e) {
-                    message = getResources().getString(R.string.wol_fail);
+            } else {
+                // Handle case where success=true but IP is missing
+                if (statusTextView != null) {
+                     statusTextView.setText("اطلاعات IP سرور از سرور دریافت نشد.");
+                     statusTextView.setVisibility(View.VISIBLE);
                 }
-
-                final String toastMessage = message;
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        Toast.makeText(PcView.this, toastMessage, Toast.LENGTH_LONG).show();
-                    }
-                });
+                Log.e("PcView", "Server IP missing in successful API response.");
+                isServerInfoFetched = false; // Allow retry?
             }
-        }).start();
+        } else {
+             // Handle API call failure (non-200 or success:false)
+             if (statusTextView != null) {
+                 statusTextView.setText(apiMessage); // Show error message from API
+                 statusTextView.setVisibility(View.VISIBLE);
+             }
+             // Handle specific 'no_active_servers' code
+             if (responseJson != null && "no_active_servers".equals(responseJson.optString("code"))) {
+                 if (statusTextView != null) statusTextView.setText("متاسفانه سرور فعالی برای شما یافت نشد.");
+             }
+             isServerInfoFetched = false; // Allow retry on failure?
+        }
     }
 
-    private void doUnpair(final ComputerDetails computer) {
-        if (computer.state == ComputerDetails.State.OFFLINE || computer.activeAddress == null) {
-            Toast.makeText(PcView.this, getResources().getString(R.string.error_pc_offline), Toast.LENGTH_SHORT).show();
-            return;
+    private void onServerInfoReceived(ComputerDetails computerDetails) {
+        if (statusTextView != null) {
+           statusTextView.setVisibility(View.GONE); // Hide status text on success
         }
-        if (managerBinder == null) {
-            Toast.makeText(PcView.this, getResources().getString(R.string.error_manager_not_running), Toast.LENGTH_LONG).show();
-            return;
-        }
-
-        Toast.makeText(PcView.this, getResources().getString(R.string.unpairing), Toast.LENGTH_SHORT).show();
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                NvHTTP httpConn;
-                String message;
-                try {
-                    httpConn = new NvHTTP(ServerHelper.getCurrentAddressFromComputer(computer),
-                            computer.httpsPort, managerBinder.getUniqueId(), computer.serverCert,
-                            PlatformBinding.getCryptoProvider(PcView.this));
-                    if (httpConn.getPairState() == PairingManager.PairState.PAIRED) {
-                        httpConn.unpair();
-                        if (httpConn.getPairState() == PairingManager.PairState.NOT_PAIRED) {
-                            message = getResources().getString(R.string.unpair_success);
-                        }
-                        else {
-                            message = getResources().getString(R.string.unpair_fail);
-                        }
-                    }
-                    else {
-                        message = getResources().getString(R.string.unpair_error);
-                    }
-                } catch (UnknownHostException e) {
-                    message = getResources().getString(R.string.error_unknown_host);
-                } catch (FileNotFoundException e) {
-                    message = getResources().getString(R.string.error_404);
-                } catch (XmlPullParserException | IOException e) {
-                    message = e.getMessage();
-                    e.printStackTrace();
-                }
-
-                final String toastMessage = message;
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        Toast.makeText(PcView.this, toastMessage, Toast.LENGTH_LONG).show();
-                    }
-                });
-            }
-        }).start();
+        // Navigate to the AppView immediately
+        doAppList(computerDetails, false, false);
     }
 
+
+    // Simplified version, assuming AppView takes necessary details via Intent
     private void doAppList(ComputerDetails computer, boolean newlyPaired, boolean showHiddenGames) {
-        if (computer.state == ComputerDetails.State.OFFLINE) {
-            Toast.makeText(PcView.this, getResources().getString(R.string.error_pc_offline), Toast.LENGTH_SHORT).show();
+        if (computer == null) {
+            Toast.makeText(PcView.this,"خطای اطلاعات سرور", Toast.LENGTH_SHORT).show();
+            if(statusTextView != null) statusTextView.setText("خطای اطلاعات سرور");
+            isServerInfoFetched = false; // Reset flag if ComputerDetails is null
             return;
         }
-        if (managerBinder == null) {
-            Toast.makeText(PcView.this, getResources().getString(R.string.error_manager_not_running), Toast.LENGTH_LONG).show();
-            return;
-        }
+         // Check the inner address field of the tuple
+         if (computer.activeAddress == null || computer.activeAddress.address == null || computer.activeAddress.address.isEmpty()) {
+             Log.e("PcView", "Cannot start AppView, activeAddress or its inner address string is null/empty");
+             Toast.makeText(this, "خطای آدرس سرور.", Toast.LENGTH_SHORT).show();
+             if(statusTextView != null) statusTextView.setText("خطای آدرس سرور.");
+             isServerInfoFetched = false; // Reset flag
+             return;
+         }
+
 
         Intent i = new Intent(this, AppView.class);
         i.putExtra(AppView.NAME_EXTRA, computer.name);
-        i.putExtra(AppView.UUID_EXTRA, computer.uuid);
+
+        String uuid = computer.uuid;
+        if(uuid == null || uuid.isEmpty()){
+            Log.w("PcView", "Computer UUID is missing, generating one based on IP.");
+            // Use address field from AddressTuple (which is String) to generate UUID
+            try {
+                String ipString = computer.activeAddress.address;
+                InetAddress inet = InetAddress.getByName(ipString);
+                uuid = UUID.nameUUIDFromBytes(inet.getAddress()).toString();
+            } catch (Exception e) {
+                Log.e("PcView", "Failed to generate UUID for AppView from IP: " + (computer.activeAddress != null ? computer.activeAddress.address : "null"), e);
+                uuid = UUID.randomUUID().toString(); // Fallback to random
+            }
+        }
+        i.putExtra(AppView.UUID_EXTRA, uuid);
         i.putExtra(AppView.NEW_PAIR_EXTRA, newlyPaired);
         i.putExtra(AppView.SHOW_HIDDEN_APPS_EXTRA, showHiddenGames);
+
+        // Use address field from AddressTuple for logging IP
+        Log.d("PcView", "Starting AppView for server: " + computer.name + " (IP: " + computer.activeAddress.address + ", UUID: " + uuid + ")");
         startActivity(i);
+        finish(); // Finish PcView after launching AppView
     }
 
+
+    private void logoutUser() {
+        isServerInfoFetched = false; // Reset flag
+        SharedPreferences prefs = getSecurePrefs();
+        if (prefs != null) {
+            SharedPreferences.Editor editor = prefs.edit();
+            editor.clear().apply(); // Clear all secure prefs
+        }
+        Intent intent = new Intent(PcView.this, HomePhoneLoginActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(intent);
+        finish(); // Close current activity
+    }
+
+
+    // Keep essential lifecycle methods
     @Override
-    public boolean onContextItemSelected(MenuItem item) {
-        AdapterContextMenuInfo info = (AdapterContextMenuInfo) item.getMenuInfo();
-        final ComputerObject computer = (ComputerObject) pcGridAdapter.getItem(info.position);
-        switch (item.getItemId()) {
-            case PAIR_ID:
-                doPair(computer.details);
-                return true;
-
-            case UNPAIR_ID:
-                doUnpair(computer.details);
-                return true;
-
-            case WOL_ID:
-                doWakeOnLan(computer.details);
-                return true;
-
-            case DELETE_ID:
-                if (ActivityManager.isUserAMonkey()) {
-                    LimeLog.info("Ignoring delete PC request from monkey");
-                    return true;
-                }
-                UiHelper.displayDeletePcConfirmationDialog(this, computer.details, new Runnable() {
-                    @Override
-                    public void run() {
-                        if (managerBinder == null) {
-                            Toast.makeText(PcView.this, getResources().getString(R.string.error_manager_not_running), Toast.LENGTH_LONG).show();
-                            return;
-                        }
-                        removeComputer(computer.details);
-                    }
-                }, null);
-                return true;
-
-            case FULL_APP_LIST_ID:
-                doAppList(computer.details, false, true);
-                return true;
-
-            case RESUME_ID:
-                if (managerBinder == null) {
-                    Toast.makeText(PcView.this, getResources().getString(R.string.error_manager_not_running), Toast.LENGTH_LONG).show();
-                    return true;
-                }
-
-                ServerHelper.doStart(this, new NvApp("app", computer.details.runningGameId, false), computer.details, managerBinder);
-                return true;
-
-            case QUIT_ID:
-                if (managerBinder == null) {
-                    Toast.makeText(PcView.this, getResources().getString(R.string.error_manager_not_running), Toast.LENGTH_LONG).show();
-                    return true;
-                }
-
-                // Display a confirmation dialog first
-                UiHelper.displayQuitConfirmationDialog(this, new Runnable() {
-                    @Override
-                    public void run() {
-                        ServerHelper.doQuit(PcView.this, computer.details,
-                                new NvApp("app", 0, false), managerBinder, null);
-                    }
-                }, null);
-                return true;
-
-            case VIEW_DETAILS_ID:
-                Dialog.displayDialog(PcView.this, getResources().getString(R.string.title_details), computer.details.toString(), false);
-                return true;
-
-            case TEST_NETWORK_ID:
-                ServerHelper.doNetworkTest(PcView.this);
-                return true;
-
-            case GAMESTREAM_EOL_ID:
-                HelpLauncher.launchGameStreamEolFaq(PcView.this);
-                return true;
-
-            default:
-                return super.onContextItemSelected(item);
-        }
-    }
-    
-    private void removeComputer(ComputerDetails details) {
-        managerBinder.removeComputer(details);
-
-        new DiskAssetLoader(this).deleteAssetsForComputer(details.uuid);
-
-        // Delete hidden games preference value
-        getSharedPreferences(AppView.HIDDEN_APPS_PREF_FILENAME, MODE_PRIVATE)
-                .edit()
-                .remove(details.uuid)
-                .apply();
-
-        for (int i = 0; i < pcGridAdapter.getCount(); i++) {
-            ComputerObject computer = (ComputerObject) pcGridAdapter.getItem(i);
-
-            if (details.equals(computer.details)) {
-                // Disable or delete shortcuts referencing this PC
-                shortcutHelper.disableComputerShortcut(details,
-                        getResources().getString(R.string.scut_deleted_pc));
-
-                pcGridAdapter.removeComputer(computer);
-                pcGridAdapter.notifyDataSetChanged();
-
-                if (pcGridAdapter.getCount() == 0) {
-                    // Show the "Discovery in progress" view
-                    noPcFoundLayout.setVisibility(View.VISIBLE);
-                }
-
-                break;
-            }
-        }
-    }
-    
-    private void updateComputer(ComputerDetails details) {
-        ComputerObject existingEntry = null;
-
-        for (int i = 0; i < pcGridAdapter.getCount(); i++) {
-            ComputerObject computer = (ComputerObject) pcGridAdapter.getItem(i);
-
-            // Check if this is the same computer
-            if (details.uuid.equals(computer.details.uuid)) {
-                existingEntry = computer;
-                break;
-            }
-        }
-
-        if (existingEntry != null) {
-            // Replace the information in the existing entry
-            existingEntry.details = details;
-        }
-        else {
-            // Add a new entry
-            pcGridAdapter.addComputer(new ComputerObject(details));
-
-            // Remove the "Discovery in progress" view
-            noPcFoundLayout.setVisibility(View.INVISIBLE);
-        }
-
-        // Notify the view that the data has changed
-        pcGridAdapter.notifyDataSetChanged();
-    }
-
+    public void onDestroy() { super.onDestroy(); }
     @Override
-    public int getAdapterFragmentLayoutId() {
-        return R.layout.pc_grid_view;
-    }
-
+    protected void onResume() { super.onResume(); }
     @Override
-    public void receiveAbsListView(AbsListView listView) {
-        listView.setAdapter(pcGridAdapter);
-        listView.setOnItemClickListener(new OnItemClickListener() {
-            @Override
-            public void onItemClick(AdapterView<?> arg0, View arg1, int pos,
-                                    long id) {
-                ComputerObject computer = (ComputerObject) pcGridAdapter.getItem(pos);
-                if (computer.details.state == ComputerDetails.State.UNKNOWN ||
-                    computer.details.state == ComputerDetails.State.OFFLINE) {
-                    // Open the context menu if a PC is offline or refreshing
-                    openContextMenu(arg1);
-                } else if (computer.details.pairState != PairState.PAIRED) {
-                    // Pair an unpaired machine by default
-                    doPair(computer.details);
-                } else {
-                    doAppList(computer.details, false, false);
-                }
-            }
-        });
-        UiHelper.applyStatusBarPadding(listView);
-        registerForContextMenu(listView);
-    }
-
-    public static class ComputerObject {
-        public ComputerDetails details;
-
-        public ComputerObject(ComputerDetails details) {
-            if (details == null) {
-                throw new IllegalArgumentException("details must not be null");
-            }
-            this.details = details;
-        }
-
-        @Override
-        public String toString() {
-            return details.name;
+    protected void onPause() { super.onPause(); }
+    @Override
+    protected void onStop() {
+        super.onStop();
+        // Check if Dialog class exists and method exists before calling (more robust)
+        try {
+             java.lang.reflect.Method method = Dialog.class.getMethod("isDialogShowing");
+             Boolean showing = (Boolean) method.invoke(null);
+             if (showing != null && showing) {
+                  Dialog.closeDialogs();
+             }
+        } catch (NoSuchMethodException nsme) {
+            // Method doesn't exist, maybe Dialog class changed or is different
+            Log.w("PcView", "Dialog.isDialogShowing() method not found. Cannot check if dialog needs closing.");
+        } catch (Exception e) {
+            // Catch other reflection/invocation errors
+            Log.w("PcView", "Error checking/closing dialogs via reflection", e);
+            // Attempt to close anyway if method might exist but checking failed
+             try { Dialog.closeDialogs(); } catch (Exception ignore) {}
         }
     }
-}
+
+} 

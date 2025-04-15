@@ -26,3 +26,5 @@
 # jMDNS
 -dontwarn javax.jmdns.impl.DNSCache
 -dontwarn org.slf4j.**
+
+-dontwarn com.google.errorprone.annotations.**

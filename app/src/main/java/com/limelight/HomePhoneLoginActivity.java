@@ -17,13 +17,17 @@ import android.widget.TextView;
 import android.view.inputmethod.InputMethodManager;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.security.crypto.EncryptedSharedPreferences;
+import androidx.security.crypto.MasterKey;
 
 import org.json.JSONObject;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.security.GeneralSecurityException;
 import java.util.Random;
 import java.util.Scanner;
 
@@ -38,14 +42,20 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
     boolean registrationMode = false;
     boolean codeSent = false;
 
+    private static final String SECURE_PREFS_NAME = "amnyar_secure_prefs";
+    private static final String KEY_IS_LOGGED_IN = "is_logged_in";
+    private static final String KEY_USER_ID = "user_id";
+    private static final String KEY_AUTH_TOKEN = "auth_token";
+    private static final String KEY_PHONE_NUMBER = "phone_number";
+    private static final String KEY_DISPLAY_NAME = "display_name";
+    private static final String KEY_EMAIL = "email";
+
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        SharedPreferences prefs = getSharedPreferences("amnyar", MODE_PRIVATE);
-        boolean isLoggedIn = prefs.getBoolean("is_logged_in", false);
-
-        if (isLoggedIn) {
+        if (isUserLoggedIn()) {
             startActivity(new Intent(this, PcView.class));
             finish();
             return;
@@ -53,58 +63,50 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
 
         setContentView(R.layout.activity_home_phone_login);
         ImageView logo = findViewById(R.id.logo);
-
         ImageView bottomImage = findViewById(R.id.bottomImage);
         Handler handler = new Handler();
         Random random = new Random();
 
         Runnable animationRunnable = new Runnable() {
-            @Override
-            public void run() {
-                int type = random.nextInt(5);
-
-                AnimatorSet animatorSet = new AnimatorSet();
-
-                switch (type) {
-                    case 0:
-                        ObjectAnimator upDown = ObjectAnimator.ofFloat(bottomImage, "translationY", 0f, -50f, 0f);
-                        upDown.setDuration(800);
-                        animatorSet.play(upDown);
-                        break;
-
-                    case 1:
-                        ObjectAnimator leftRight = ObjectAnimator.ofFloat(bottomImage, "translationX", 0f, 50f, -50f, 0f);
-                        leftRight.setDuration(900);
-                        animatorSet.play(leftRight);
-                        break;
-
-                    case 2:
-                        float angle = random.nextBoolean() ? 360f : -360f;
-                        ObjectAnimator rotate = ObjectAnimator.ofFloat(bottomImage, "rotation", 0f, angle);
-                        rotate.setDuration(1000);
-                        animatorSet.play(rotate);
-                        break;
-
-                    case 3:
-                        ObjectAnimator blinkOut = ObjectAnimator.ofFloat(bottomImage, "alpha", 1f, 0f);
-                        blinkOut.setDuration(200);
-                        ObjectAnimator blinkIn = ObjectAnimator.ofFloat(bottomImage, "alpha", 0f, 1f);
-                        blinkIn.setDuration(200);
-                        animatorSet.playSequentially(blinkOut, blinkIn, blinkOut, blinkIn);
-                        break;
-
-                    case 4:
-                        ObjectAnimator scaleX = ObjectAnimator.ofFloat(bottomImage, "scaleX", 1f, 1.4f, 1f);
-                        ObjectAnimator scaleY = ObjectAnimator.ofFloat(bottomImage, "scaleY", 1f, 1.4f, 1f);
-                        scaleX.setDuration(700);
-                        scaleY.setDuration(700);
-                        animatorSet.playTogether(scaleX, scaleY);
-                        break;
-                }
-
-                animatorSet.start();
-                handler.postDelayed(this, 1500 + random.nextInt(800));
-            }
+           @Override
+           public void run() {
+               int type = random.nextInt(5);
+               AnimatorSet animatorSet = new AnimatorSet();
+               switch (type) {
+                   case 0:
+                       ObjectAnimator upDown = ObjectAnimator.ofFloat(bottomImage, "translationY", 0f, -50f, 0f);
+                       upDown.setDuration(800);
+                       animatorSet.play(upDown);
+                       break;
+                   case 1:
+                       ObjectAnimator leftRight = ObjectAnimator.ofFloat(bottomImage, "translationX", 0f, 50f, -50f, 0f);
+                       leftRight.setDuration(900);
+                       animatorSet.play(leftRight);
+                       break;
+                   case 2:
+                       float angle = random.nextBoolean() ? 360f : -360f;
+                       ObjectAnimator rotate = ObjectAnimator.ofFloat(bottomImage, "rotation", 0f, angle);
+                       rotate.setDuration(1000);
+                       animatorSet.play(rotate);
+                       break;
+                   case 3:
+                       ObjectAnimator blinkOut = ObjectAnimator.ofFloat(bottomImage, "alpha", 1f, 0f);
+                       blinkOut.setDuration(200);
+                       ObjectAnimator blinkIn = ObjectAnimator.ofFloat(bottomImage, "alpha", 0f, 1f);
+                       blinkIn.setDuration(200);
+                       animatorSet.playSequentially(blinkOut, blinkIn, blinkOut, blinkIn);
+                       break;
+                   case 4:
+                       ObjectAnimator scaleX = ObjectAnimator.ofFloat(bottomImage, "scaleX", 1f, 1.4f, 1f);
+                       ObjectAnimator scaleY = ObjectAnimator.ofFloat(bottomImage, "scaleY", 1f, 1.4f, 1f);
+                       scaleX.setDuration(700);
+                       scaleY.setDuration(700);
+                       animatorSet.playTogether(scaleX, scaleY);
+                       break;
+               }
+               animatorSet.start();
+               handler.postDelayed(this, 1500 + random.nextInt(800));
+           }
         };
         handler.post(animationRunnable);
 
@@ -113,13 +115,11 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
         familyInput = findViewById(R.id.familyInput);
         emailInput = findViewById(R.id.emailInput);
         codeInput = findViewById(R.id.codeInput);
-
         sendCodeButton = findViewById(R.id.sendCodeButton);
         registerButton = findViewById(R.id.registerButton);
         verifyButton = findViewById(R.id.verifyButton);
         backToLoginButton = findViewById(R.id.backToLoginButton);
         resendCodeButton = findViewById(R.id.resendCodeButton);
-
         statusText = findViewById(R.id.statusText);
         timerText = findViewById(R.id.timerText);
 
@@ -141,29 +141,24 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
             String name = nameInput.getText().toString().trim();
             String family = familyInput.getText().toString().trim();
             String email = emailInput.getText().toString().trim();
-
             if (name.isEmpty() || family.isEmpty()) {
                 statusText.setText("نام و نام خانوادگی را وارد کنید");
                 return;
             }
-
-            if (!email.contains("@")) {
+            if (!email.contains("@")) { // Basic check, consider more robust validation
                 statusText.setText("ایمیل معتبر نیست");
                 return;
             }
-
             sendRegisterRequest(phone, name, family, email);
         });
 
         verifyButton.setOnClickListener(v -> {
             String phone = phoneInput.getText().toString().trim();
             String code = codeInput.getText().toString().trim();
-
             if (!code.matches("^\\d{6}$")) {
                 statusText.setText("کد ۶ رقمی معتبر نیست");
                 return;
             }
-
             verifyCode(phone, code);
         });
 
@@ -171,8 +166,8 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
             registrationMode = false;
             codeSent = false;
              if (timer != null) {
-                  timer.cancel();
-                  timer = null;
+                 timer.cancel();
+                 timer = null;
              }
             showLoginMode();
         });
@@ -191,6 +186,35 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
         }, 300);
     }
 
+    private SharedPreferences getSecurePrefs() {
+        try {
+            MasterKey masterKey = new MasterKey.Builder(getApplicationContext())
+                    .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                    .build();
+
+            return EncryptedSharedPreferences.create(
+                    getApplicationContext(),
+                    SECURE_PREFS_NAME,
+                    masterKey,
+                    EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                    EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            );
+        } catch (GeneralSecurityException | IOException e) {
+            Log.e("HomePhoneLogin", "Failed to get EncryptedSharedPreferences", e);
+            runOnUiThread(()-> statusText.setText("خطای داخلی ذخیره‌سازی امن"));
+            return null; // Return null on error
+        }
+    }
+
+
+    private boolean isUserLoggedIn() {
+        SharedPreferences prefs = getSecurePrefs();
+        if (prefs != null) {
+            return prefs.getBoolean(KEY_IS_LOGGED_IN, false);
+        }
+        return false;
+    }
+
 
     private void showLoginMode() {
         nameInput.setVisibility(View.GONE);
@@ -202,10 +226,8 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
         backToLoginButton.setVisibility(View.GONE);
         resendCodeButton.setVisibility(View.GONE);
         timerText.setVisibility(View.GONE);
-
         sendCodeButton.setVisibility(View.VISIBLE);
         sendCodeButton.setEnabled(true);
-
         phoneInput.setEnabled(true);
         phoneInput.setAlpha(1.0f);
         phoneInput.setText("");
@@ -219,17 +241,15 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
         emailInput.setVisibility(View.VISIBLE);
         registerButton.setVisibility(View.VISIBLE);
         registerButton.setEnabled(true);
-
         backToLoginButton.setVisibility(View.VISIBLE);
         sendCodeButton.setVisibility(View.GONE);
         codeInput.setVisibility(View.GONE);
         verifyButton.setVisibility(View.GONE);
         resendCodeButton.setVisibility(View.GONE);
         timerText.setVisibility(View.GONE);
-
-         phoneInput.setEnabled(false);
-         phoneInput.setAlpha(0.4f);
-         nameInput.requestFocus();
+        phoneInput.setEnabled(false);
+        phoneInput.setAlpha(0.4f);
+        nameInput.requestFocus();
     }
 
     private void showCodeInput() {
@@ -238,26 +258,21 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
         codeInput.setText("");
         verifyButton.setVisibility(View.VISIBLE);
         verifyButton.setEnabled(true);
-
         timerText.setVisibility(View.VISIBLE);
-        resendCodeButton.setVisibility(View.GONE);
-
+        resendCodeButton.setVisibility(View.GONE); // Hide initially until timer finishes
         registerButton.setVisibility(View.GONE);
         sendCodeButton.setVisibility(View.GONE);
         nameInput.setVisibility(View.GONE);
         familyInput.setVisibility(View.GONE);
         emailInput.setVisibility(View.GONE);
-
         backToLoginButton.setVisibility(View.VISIBLE);
-
         phoneInput.setEnabled(false);
         phoneInput.setAlpha(0.4f);
-
         codeInput.requestFocus();
         codeInput.postDelayed(() -> {
-            InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+           InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
              if (imm != null) {
-                  imm.showSoftInput(codeInput, InputMethodManager.SHOW_IMPLICIT);
+                 imm.showSoftInput(codeInput, InputMethodManager.SHOW_IMPLICIT);
              }
         }, 300);
     }
@@ -309,28 +324,21 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
                 final String finalResponseString = responseString;
 
                 runOnUiThread(() -> {
-                    sendCodeButton.setEnabled(true);
+                    sendCodeButton.setEnabled(true); // Re-enable button even if timer is running for resend logic
 
                     if (finalResponseCode == 200) {
                         statusText.setText("کد با موفقیت ارسال شد");
-                        showCodeInput();
+                        showCodeInput(); // Only show code input on success
                     } else if (finalResponseCode == 404) {
-                        if (timer != null) {
-                              timer.cancel();
-                              timer = null;
-                        }
+                        if (timer != null) { timer.cancel(); timer = null; }
                         timerText.setVisibility(View.GONE);
                         resendCodeButton.setVisibility(View.GONE);
-
                         statusText.setText("کاربری با این شماره وجود ندارد، لطفاً ثبت‌نام کنید.");
                         showRegisterForm();
-                    } else {
-                         if (timer != null) {
-                            timer.cancel();
-                            timer = null;
-                         }
-                         timerText.setVisibility(View.GONE);
-                         resendCodeButton.setVisibility(View.GONE);
+                    } else { // Handle other errors
+                        if (timer != null) { timer.cancel(); timer = null; }
+                        timerText.setVisibility(View.GONE);
+                        resendCodeButton.setVisibility(View.GONE);
 
                         String errorMessage = "خطا در ارسال کد";
                         try {
@@ -347,28 +355,24 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
                             errorMessage = "خطای نامشخص در پاسخ سرور (" + finalResponseCode + ")";
                         }
                         statusText.setText(errorMessage);
-                        showLoginMode();
+                        showLoginMode(); // Go back to login mode on error
                     }
                 });
 
             } catch (Exception e) {
                 Log.e("sendCodeToApi", "Network or processing error", e);
                 runOnUiThread(() -> {
-                     if (timer != null) {
-                        timer.cancel();
-                        timer = null;
-                     }
-                    sendCodeButton.setEnabled(true);
-                    timerText.setVisibility(View.GONE);
-                    resendCodeButton.setVisibility(View.GONE);
-
-                    statusText.setText("خطا در ارتباط با سرور");
-                    showLoginMode();
+                     if (timer != null) { timer.cancel(); timer = null; }
+                     sendCodeButton.setEnabled(true);
+                     timerText.setVisibility(View.GONE);
+                     resendCodeButton.setVisibility(View.GONE);
+                     statusText.setText("خطا در ارتباط با سرور");
+                     showLoginMode(); // Go back to login mode on error
                 });
             } finally {
-                if (conn != null) {
-                    conn.disconnect();
-                }
+                 if (conn != null) {
+                     conn.disconnect();
+                 }
             }
         }).start();
     }
@@ -430,11 +434,11 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
 
                     try {
                          if (!finalResponseString.isEmpty()) {
-                                responseJson = new JSONObject(finalResponseString);
-                                if (finalResponseCode == 200) {
-                                    success = responseJson.optBoolean("success", false);
-                                }
-                                apiMessage = responseJson.optString("message", apiMessage);
+                              responseJson = new JSONObject(finalResponseString);
+                              if (finalResponseCode == 200) {
+                                   success = responseJson.optBoolean("success", false);
+                              }
+                              apiMessage = responseJson.optString("message", apiMessage);
                          }
                     } catch (Exception parseEx) {
                          Log.e("sendRegisterRequest", "Error parsing JSON response", parseEx);
@@ -448,17 +452,15 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
                         showCodeInput();
                     } else {
                         statusText.setText(apiMessage);
-
+                        // Handle 409 Conflict (user already exists)
                         if (finalResponseCode == 409) {
                             registrationMode = false;
                             codeSent = false;
-                             if (timer != null) {
-                                  timer.cancel();
-                                  timer = null;
-                             }
+                             if (timer != null) { timer.cancel(); timer = null; }
                             showLoginMode();
                             statusText.setText(apiMessage + "\n" + "لطفاً به جای ثبت‌نام، وارد شوید.");
                         } else {
+                            // Re-enable button for other errors to allow retry
                             registerButton.setEnabled(true);
                         }
                     }
@@ -472,7 +474,7 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
                 });
             } finally {
                  if (conn != null) {
-                      conn.disconnect();
+                     conn.disconnect();
                  }
             }
         }).start();
@@ -510,96 +512,118 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
 
                 InputStream inputStream;
                  if (responseCode >= 200 && responseCode < 400) {
-                    inputStream = conn.getInputStream();
+                     inputStream = conn.getInputStream();
                  } else {
-                    inputStream = conn.getErrorStream();
+                     inputStream = conn.getErrorStream();
                  }
 
                  String responseString = "";
                  if (inputStream != null) {
-                      try (Scanner scanner = new Scanner(inputStream, "UTF-8")) {
-                           responseString = scanner.useDelimiter("\\A").next();
-                      }
+                       try (Scanner scanner = new Scanner(inputStream, "UTF-8")) {
+                            responseString = scanner.useDelimiter("\\A").next();
+                       }
                  } else {
-                      Log.w("verifyCode", "InputStream was null for response code: " + responseCode);
+                       Log.w("verifyCode", "InputStream was null for response code: " + responseCode);
                  }
 
                 final int finalResponseCode = responseCode;
                 final String finalResponseString = responseString;
 
                 runOnUiThread(() -> {
-                    if (timer != null) {
-                         timer.cancel();
-                         timer = null;
-                    }
+                    if (timer != null) { timer.cancel(); timer = null; }
                     timerText.setVisibility(View.GONE);
                     resendCodeButton.setVisibility(View.GONE);
-
 
                     JSONObject responseJson = null;
                     boolean success = false;
                     String apiMessage = "کد اشتباه یا منقضی شده";
 
-                     try {
-                          if (!finalResponseString.isEmpty()) {
-                                 responseJson = new JSONObject(finalResponseString);
-                                if (finalResponseCode == 200) {
-                                    success = responseJson.optBoolean("success", false);
-                                }
-                                apiMessage = responseJson.optString("message", apiMessage);
-                          }
-                     } catch (Exception parseEx) {
-                          Log.e("verifyCode", "Error parsing JSON response", parseEx);
-                          apiMessage = "خطای نامشخص در پاسخ سرور (" + finalResponseCode + ")";
-                     }
+                    try {
+                         if (!finalResponseString.isEmpty()) {
+                              responseJson = new JSONObject(finalResponseString);
+                              if (finalResponseCode == 200) {
+                                   success = responseJson.optBoolean("success", false);
+                              }
+                              apiMessage = responseJson.optString("message", apiMessage);
+                         }
+                    } catch (Exception parseEx) {
+                         Log.e("verifyCode", "Error parsing JSON response", parseEx);
+                         apiMessage = "خطای نامشخص در پاسخ سرور (" + finalResponseCode + ")";
+                    }
 
 
                     if (finalResponseCode == 200 && success) {
-                        statusText.setText(registrationMode ? "ثبت‌نام و ورود موفقیت‌آمیز" : "ورود موفقیت‌آمیز");
+                         statusText.setText(registrationMode ? "ثبت‌نام و ورود موفقیت‌آمیز" : "ورود موفقیت‌آمیز");
 
-                        SharedPreferences prefs = getSharedPreferences("amnyar", MODE_PRIVATE);
-                        SharedPreferences.Editor editor = prefs.edit();
-                        editor.putBoolean("is_logged_in", true);
+                         SharedPreferences securePrefs = getSecurePrefs();
+                         if (securePrefs == null) {
+                             statusText.setText("خطای ذخیره‌سازی امن اطلاعات");
+                             verifyButton.setEnabled(true);
+                             // Consider showing resend button here too maybe
+                             return;
+                         }
 
-                        if (responseJson != null && responseJson.has("data")) {
+                         if (responseJson != null && responseJson.has("data")) {
                              JSONObject userData = responseJson.optJSONObject("data");
                              if (userData != null) {
-                                 editor.putInt("user_id", userData.optInt("user_id", -1));
-                                 editor.putString("display_name", userData.optString("display_name", ""));
-                                 editor.putString("email", userData.optString("email", ""));
+                                 int userId = userData.optInt("user_id", -1);
+                                 String token = userData.optString("token", null);
+                                 String displayName = userData.optString("display_name", "");
+                                 String email = userData.optString("email", "");
+                                 String currentPhone = phone;
+
+                                 if (userId != -1 && token != null && !token.isEmpty()) {
+                                      SharedPreferences.Editor editor = securePrefs.edit();
+                                      editor.putBoolean(KEY_IS_LOGGED_IN, true);
+                                      editor.putInt(KEY_USER_ID, userId);
+                                      editor.putString(KEY_AUTH_TOKEN, token);
+                                      editor.putString(KEY_PHONE_NUMBER, currentPhone);
+                                      editor.putString(KEY_DISPLAY_NAME, displayName);
+                                      editor.putString(KEY_EMAIL, email);
+                                      editor.apply();
+
+                                      startActivity(new Intent(HomePhoneLoginActivity.this, PcView.class));
+                                      finish();
+                                      // Successful exit point
+
+                                 } else {
+                                      Log.e("HomePhoneLogin", "User ID or Token missing in successful API response.");
+                                      statusText.setText("پاسخ سرور ناقص است. لطفاً دوباره تلاش کنید.");
+                                      verifyButton.setEnabled(true);
+                                      showResendMaybe();
+                                 }
+                             } else {
+                                 Log.e("HomePhoneLogin", "'data' object is null in successful API response.");
+                                 statusText.setText("خطای دریافت اطلاعات کاربر از سرور.");
+                                 verifyButton.setEnabled(true);
+                                 showResendMaybe();
                              }
-                        }
-                        editor.apply();
+                         } else {
+                              Log.e("HomePhoneLogin", "'data' object missing in successful API response.");
+                              statusText.setText("پاسخ سرور نامعتبر است.");
+                              verifyButton.setEnabled(true);
+                              showResendMaybe();
+                         }
 
-
-                        startActivity(new Intent(HomePhoneLoginActivity.this, PcView.class));
-                        finish();
-                    } else {
+                    } else { // Handle API call failure (non-200 or success:false)
                         statusText.setText(apiMessage);
                         verifyButton.setEnabled(true);
-                         resendCodeButton.setVisibility(View.VISIBLE);
-                         resendCodeButton.setEnabled(true);
-                         resendCodeButton.setAlpha(1.0f);
-                         resendCodeButton.setTextColor(Color.parseColor("#000000"));
+                        showResendMaybe();
                     }
                 });
 
             } catch (Exception e) {
                  Log.e("verifyCode", "Network or processing error", e);
                  runOnUiThread(() -> {
-                      if (timer != null) {
-                           timer.cancel();
-                           timer = null;
-                      }
-                      timerText.setVisibility(View.GONE);
-                      resendCodeButton.setVisibility(View.GONE);
-                      verifyButton.setEnabled(true);
-
-                     statusText.setText("خطا در بررسی کد");
+                     if (timer != null) { timer.cancel(); timer = null; }
+                     timerText.setVisibility(View.GONE);
+                     resendCodeButton.setVisibility(View.GONE);
+                     verifyButton.setEnabled(true);
+                     statusText.setText("خطا در بررسی کد یا ارتباط با سرور");
                  });
             } finally {
                  if (conn != null) {
-                      conn.disconnect();
+                     conn.disconnect();
                  }
             }
         }).start();
@@ -618,32 +642,39 @@ public class HomePhoneLoginActivity extends AppCompatActivity {
         resendCodeButton.setEnabled(false);
         resendCodeButton.setAlpha(0.4f);
         resendCodeButton.setTextColor(Color.parseColor("#AAAAAA"));
-        resendCodeButton.setVisibility(View.GONE);
-
+        resendCodeButton.setVisibility(View.GONE); // Initially hidden
 
         timer = new CountDownTimer(59000, 1000) {
             @Override
             public void onTick(long millisUntilFinished) {
                 secondsRemaining--;
                  if (secondsRemaining >= 0) {
-                    timerText.setText("ارسال مجدد تا " + secondsRemaining + " ثانیه دیگر");
+                     timerText.setText("ارسال مجدد تا " + secondsRemaining + " ثانیه دیگر");
                  } else {
-                     timerText.setText("ارسال مجدد تا ۰ ثانیه دیگر");
+                     timerText.setText("ارسال مجدد تا ۰ ثانیه دیگر"); // Should not happen if logic is correct
                  }
-                 resendCodeButton.setVisibility(View.GONE);
+                 resendCodeButton.setVisibility(View.GONE); // Keep hidden during countdown
             }
 
             @Override
             public void onFinish() {
                 timer = null;
-                resendCodeButton.setEnabled(true);
-                resendCodeButton.setAlpha(1.0f);
-                resendCodeButton.setTextColor(Color.parseColor("#000000"));
-                resendCodeButton.setVisibility(View.VISIBLE);
-                timerText.setVisibility(View.GONE);
+                showResendMaybe(); // Call helper to show resend button
             }
         }.start();
     }
+
+    private void showResendMaybe() {
+         // Only show resend if we are in the code input phase
+         if(codeSent && codeInput.getVisibility() == View.VISIBLE) {
+              resendCodeButton.setEnabled(true);
+              resendCodeButton.setAlpha(1.0f);
+              resendCodeButton.setTextColor(Color.parseColor("#000000"));
+              resendCodeButton.setVisibility(View.VISIBLE);
+              timerText.setVisibility(View.GONE);
+         }
+    }
+
 
      @Override
      protected void onDestroy() {
